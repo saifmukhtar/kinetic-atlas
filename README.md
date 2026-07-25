@@ -10,7 +10,7 @@ The Kinetic Network allows users to register decentralized namespaces and domain
 
 **Kinetic Atlas bridges this gap.**
 
-Instead of forcing users to build custom plugins or browsers to resolve decentralized `.kin` domains, Atlas spins up a local, standard DNS server (on UDP/TCP port 53 or a custom port). Your local operating system can point its DNS resolver to Atlas. When you type `mywebsite.kin` into your browser, the OS queries Atlas. Atlas then traverses the Kinetic Network's peer-to-peer Distributed Hash Table (DHT), finds the underlying IP addresses, and returns them to the browser just like a traditional DNS server would.
+Instead of forcing users to build custom plugins or browsers to resolve decentralized `.kin` domains, Atlas spins up a local, standard DNS server. Your local operating system can point its DNS resolver to Atlas. When you type `mywebsite.kin` into your browser, the OS queries Atlas. Atlas then traverses the Kinetic Network's peer-to-peer Distributed Hash Table (DHT), finds the underlying IP addresses, and returns them to the browser just like a traditional DNS server would.
 
 The goal is **zero-friction decentralization**.
 
@@ -34,13 +34,30 @@ To stay connected, Atlas runs a background synchronization loop (`sync_with_kine
 
 ---
 
-## Features
+## 🌐 Kinetic Atlas Network Registry
 
-- **Decentralized DNS**: Serves A, AAAA, CNAME, TXT, PeerId, KID, and IPFS records over standard UDP/TCP DNS queries.
-- **Kademlia DHT Integration**: Connects to the Kinetic Network via Libp2p to fetch domain mappings.
-- **Background Synchronization**: Automatically syncs with the Kinetic Daemon to ensure the local DHT node has up-to-date peer topologies.
-- **Concurrent Lookups**: Highly optimized parallel peer lookups for lightning-fast DNS resolution using `tokio::task::JoinSet`.
-- **Robust Error Handling**: Handles network faults and malformed JSON payloads gracefully without panicking.
+Since Kinetic allows anyone to fork the network, run their own parallel nodes, and create custom decentralized domain namespaces, we maintain a registry to prevent **network collisions**.
+
+This is similar to Ethereum's ChainID Registry (`chainlist.org`) or the Cosmos Chain Registry. By registering your network, you ensure that:
+1. No one else overrides your custom TLD (e.g. `.kin`, `.fork`).
+2. You do not accidentally bind to local IP addresses and ports already in use by the main Kinetic network or other popular forks.
+3. Your TLD does not conflict with established **ICANN** domains (e.g., `.com`, `.net`, `.org` are strictly prohibited).
+
+### How to Register Your Fork / TLD
+
+**Option 1: Using the Interactive Web Form (Recommended)**
+1. Go to the "Issues" tab in this repository.
+2. Click "New Issue" and select **"Register New Network"**.
+3. Fill out the interactive form with your details (Operator Name, Network ID, TLD, Bind IPs, etc.).
+4. Submit the issue! Maintainers will review it and automatically convert it into a JSON configuration for the registry.
+
+**Option 2: Direct JSON Pull Request (For Developers)**
+1. Fork this repository.
+2. Create a JSON file in the `networks/` directory (e.g., `networks/myfork.json`) matching our template format. 
+3. *Note: Ensure your chosen Local Bind IP does not conflict with Kinetic Mainnet's `127.0.0.2`.*
+4. Submit a Pull Request. Once merged, Atlas instances globally can pull this configuration.
+
+---
 
 ## Getting Started
 
@@ -63,17 +80,19 @@ You can edit it to point to your specific `kinetic-daemon` URL and configure the
 - `src/main.rs`: The main entry point, DNS server handler, and background sync logic.
 - `src/network.rs`: The libp2p swarm and Kademlia DHT peer configuration.
 - `src/types.rs`: Shared types for DnsRecord and serialization config.
+- `networks/`: Directory containing the `.json` configurations for registered TLDs (like `.kin` or `.fork`).
 - `fuzz/`: Cargo-fuzz targets to ensure robust network deserialization.
-- `networks/`: Directory for placing `.json` config files for specific TLDs like `.kin` or `.fork`.
+
+---
 
 ## Testing & Fuzzing
 
-Run the test suite:
+Run the standard test suite:
 ```bash
 cargo test
 ```
 
-Run the fuzzer (Requires nightly rust):
+Run the robust payload fuzzer (Requires nightly rust):
 ```bash
 cargo +nightly fuzz run fuzz_target_1
 ```
