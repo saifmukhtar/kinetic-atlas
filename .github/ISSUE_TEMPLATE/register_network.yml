@@ -1,0 +1,93 @@
+name: Register New Network
+description: Submit your Kinetic fork or TLD to the Atlas Network Registry
+title: "Network Registration: [Network Name]"
+labels: ["network-registry"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Welcome to the Kinetic Atlas Network Registry! 
+        Please fill out this form to register your fork or TLD. Once approved, the maintainers will automatically convert this submission into a `.json` file for the `networks/` folder.
+
+  - type: input
+    id: operator
+    attributes:
+      label: Operator / Organization Name
+      description: Who is running this network?
+      placeholder: e.g. John Doe / MyCompany
+    validations:
+      required: true
+
+  - type: input
+    id: email
+    attributes:
+      label: Contact Email
+      description: How can we contact you regarding this network?
+      placeholder: operator@example.com
+    validations:
+      required: true
+
+  - type: input
+    id: repo_url
+    attributes:
+      label: Fork Repository URL
+      description: Where is the source code for your Kinetic fork located?
+      placeholder: https://github.com/...
+    validations:
+      required: false
+
+  - type: input
+    id: network_name
+    attributes:
+      label: Network Name
+      description: A human-readable name for your network.
+      placeholder: Kinetic Developer Fork
+    validations:
+      required: true
+
+  - type: input
+    id: network_id
+    attributes:
+      label: Network ID
+      description: A unique identifier for your network (e.g. kinetic-dev-fork-01)
+      placeholder: kinetic-dev-fork-01
+    validations:
+      required: true
+
+  - type: input
+    id: tld
+    attributes:
+      label: Top-Level Domain (TLD)
+      description: Your decentralized domain extension. Must NOT be an ICANN domain (.com, .net, etc.).
+      placeholder: e.g. .fork
+    validations:
+      required: true
+
+  - type: input
+    id: local_bind_ip
+    attributes:
+      label: Preferred Local Bind IP
+      description: The Kinetic Mainnet uses 127.0.0.2. To avoid collisions, pick an alternative (e.g. 127.0.0.3, 127.0.0.4).
+      placeholder: 127.0.0.3
+    validations:
+      required: true
+
+  - type: input
+    id: local_dns_port
+    attributes:
+      label: Preferred Local DNS Port
+      description: Default is 34291. Choose an alternative if running alongside Mainnet.
+      placeholder: 34292
+    validations:
+      required: true
+
+  - type: textarea
+    id: bootstrap_peers
+    attributes:
+      label: Bootstrap Peers
+      description: List the Libp2p multiaddresses of your seed nodes, one per line.
+      placeholder: |
+        /ip4/198.51.100.1/tcp/6170/p2p/12D3Koo...
+        /ip4/198.51.100.2/tcp/6170/p2p/12D3Koo...
+    validations:
+      required: false
