@@ -1,0 +1,7 @@
+{
+  "network_id": "forkkinetic",
+  "tld": "fork",
+  "bootstrap_nodes": [
+      "/ip4/127.0.0.1/tcp/6170/p2p/12D3KooWPzXcPsAvDZin1Sa3XVm51vaXm9aC683Zf4DiW1L6tLNw"
+  ]
+}
