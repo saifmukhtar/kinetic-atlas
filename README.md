@@ -45,13 +45,6 @@ This is similar to Ethereum's ChainID Registry (`chainlist.org`) or the Cosmos C
 
 ### How to Register Your Fork / TLD
 
-**Option 1: Using the Interactive Web Form (Recommended)**
-1. Go to the "Issues" tab in this repository.
-2. Click "New Issue" and select **"Register New Network"**.
-3. Fill out the interactive form with your details (Operator Name, Network ID, TLD, Bind IPs, etc.).
-4. Submit the issue! Maintainers will review it and automatically convert it into a JSON configuration for the registry.
-
-**Option 2: Direct JSON Pull Request (For Developers)**
 1. Fork this repository.
 2. Create a JSON file in the `networks/` directory (e.g., `networks/myfork.json`) matching our template format. 
 3. *Note: Ensure your chosen Local Bind IP does not conflict with Kinetic Mainnet's `127.0.0.2`.*
