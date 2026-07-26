@@ -83,3 +83,23 @@ graph TD
     B -->|Returns IP| A
     A -->|HTTP GET 192.x.x.x| G[Decentralized Web Server]
 ```
+
+## 5. Network Configuration Schema
+To provide a concrete example of how the registry maps networks, here is the exact JSON structure that Atlas parses at runtime. The automated pipeline ensures this is kept perfectly minimal for lightning-fast parsing:
+
+```json
+{
+    "network_id": "kinetic",
+    "tld": "kin",
+    "local_bind_ip": "127.0.0.1",
+    "seed_domain": "seed.kinetic.network",
+    "bootstrap_nodes": [
+        "/ip4/44.219.188.204/tcp/6070/p2p/12D3KooW..."
+    ]
+}
+```
+
+## 6. Thread Safety and Concurrency
+Because Atlas handles highly concurrent DNS UDP requests from the operating system, the internal `TldRegistry` is wrapped in an `Arc<RwLock<TldRegistry>>`. This guarantees that:
+- DNS queries can be read in parallel with zero blocking (`RwLock::read`).
+- If the background sync loop or a new GitHub PR pull updates a network's JSON configuration, Atlas can acquire a write lock (`RwLock::write`) to hot-reload the registry in milliseconds without dropping any active DNS queries or requiring a server restart.
