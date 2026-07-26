@@ -1,0 +1,27 @@
+name: Daily Network Uptime Monitor
+
+on:
+  schedule:
+    - cron: '0 0 * * *' # Runs at midnight UTC every day
+  workflow_dispatch: # Allows manual trigger for testing
+
+jobs:
+  monitor:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.10'
+
+      - name: Run Uptime Monitor Script
+        run: python .github/scripts/monitor_networks.py
+
+      - name: Commit changes to ATLAS.md
+        uses: stefanzweifel/git-auto-commit-action@v4
+        with:
+          commit_message: "chore: update ATLAS.md network statuses and uptime state"
+          file_pattern: "ATLAS.md .github/scripts/uptime_state.json"

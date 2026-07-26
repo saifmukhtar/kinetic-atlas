@@ -1,0 +1,46 @@
+name: Process Network Registration
+on:
+  issues:
+    types: [opened, edited]
+
+jobs:
+  register-tld:
+    runs-on: ubuntu-latest
+    if: contains(github.event.issue.labels.*.name, 'network-registration')
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v3
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.10'
+
+      - name: Run Validation and Generate Config
+        env:
+          ISSUE_BODY: ${{ github.event.issue.body }}
+          ISSUE_USER: ${{ github.event.issue.user.login }}
+          ISSUE_LABELS: ${{ toJSON(github.event.issue.labels.*.name) }}
+        run: |
+          python .github/scripts/validate_registration.py > result.log 2>&1
+          cat result.log
+          
+          # Check if the script failed
+          if [ $? -ne 0 ]; then
+            echo "Validation failed."
+            # We would use github script here to comment on failure, but for simplicity, we exit
+            exit 1
+          fi
+
+      - name: Create Pull Request
+        uses: peter-evans/create-pull-request@v5
+        with:
+          commit-message: "Register new TLD from Issue #${{ github.event.issue.number }}"
+          title: "Register Network TLD from Issue #${{ github.event.issue.number }}"
+          body: |
+            Automated Pull Request to register a new Kinetic network TLD.
+            Closes #${{ github.event.issue.number }}
+            
+            Please review the generated JSON and ATLAS.md directory changes before merging!
+          branch: "register-tld-${{ github.event.issue.number }}"
+          labels: "automated-pr"

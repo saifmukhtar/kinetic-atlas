@@ -1,0 +1,113 @@
+name: Register Kinetic Network
+description: Submit a new foreign network to the Atlas Global Registry
+title: "Register Network: <TLD>"
+labels: ["network-registration", "pending-automated-checks"]
+assignees: []
+body:
+  - type: markdown
+    attributes:
+      value: |
+        ## Welcome to the Atlas Registry!
+        Please fill out this form to add your Kinetic fork or network to the global Atlas bridge. 
+        **Note:** An automated bot will ping your seed domain and bootstrap nodes to ensure your network is live before creating a Pull Request.
+
+  - type: input
+    id: network_name
+    attributes:
+      label: Network Name
+      description: The human-readable name of your network (e.g., "Kinetic").
+      placeholder: Kinetic
+    validations:
+      required: true
+
+  - type: input
+    id: tld_suffix
+    attributes:
+      label: TLD Suffix
+      description: The top-level domain suffix for your network without the dot (e.g., "kin"). Must be alphanumeric.
+      placeholder: kin
+    validations:
+      required: true
+
+  - type: input
+    id: description
+    attributes:
+      label: Short Description
+      description: A brief summary of your network's purpose (max 100 chars). This will appear in the ATLAS.md discovery directory.
+      placeholder: A fast, privacy-focused fork of Kinetic.
+    validations:
+      required: true
+
+  - type: input
+    id: website
+    attributes:
+      label: Project Website
+      description: Where can users learn more about your network?
+      placeholder: https://saifmkhtar.dev
+    validations:
+      required: true
+
+  - type: input
+    id: repository
+    attributes:
+      label: Repository URL
+      description: The GitHub or GitLab URL of your project's source code.
+      placeholder: https://github.com/saifmukhtar/kinetic
+
+  - type: input
+    id: seed_domain
+    attributes:
+      label: Seed Domain (seed.BASE_DOMAIN)
+      description: The primary DNS seed for your network (e.g., "seed.saifmkhtar.dev").
+      placeholder: seed.saifmkhtar.dev
+    validations:
+      required: true
+
+  - type: dropdown
+    id: network_type
+    attributes:
+      label: Network Type
+      description: What kind of network is this?
+      options:
+        - Public
+        - Community
+        - Dev
+    validations:
+      required: true
+
+  - type: input
+    id: network_id
+    attributes:
+      label: Network ID
+      description: The unique network ID for your chain (e.g., "kinetic").
+      placeholder: kinetic
+    validations:
+      required: true
+
+  - type: input
+    id: local_bind_ip
+    attributes:
+      label: Local Bind IP
+      description: The local loopback IP (127.0.0.X) that local daemons for this network should bind to, preventing port conflicts.
+      placeholder: 127.0.0.X
+    validations:
+      required: true
+
+  - type: textarea
+    id: bootstrap_nodes
+    attributes:
+      label: Hardcoded Bootstrap Nodes
+      description: Provide exactly 3 reliable, unique bootstrap nodes (libp2p multiaddr format with PeerID, one per line).
+      placeholder: |
+        /ip4/44.219.188.204/tcp/6070/p2p/12D3KooWJkn8Dgb33N2p9sLBNX9Eg8W8whgdjLs2YJxWuTme7ZSs
+    validations:
+      required: true
+
+  - type: input
+    id: ipfs_gateway
+    attributes:
+      label: IPFS Gateway (Optional)
+      description: The default IPFS gateway your network recommends.
+      placeholder: https://ipfs.io
+    validations:
+      required: false

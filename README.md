@@ -45,10 +45,21 @@ This is similar to Ethereum's ChainID Registry (`chainlist.org`) or the Cosmos C
 
 ### How to Register Your Fork / TLD
 
-1. Fork this repository.
-2. Create a JSON file in the `networks/` directory (e.g., `networks/myfork.json`) matching our template format. 
-3. *Note: Ensure your chosen Local Bind IP does not conflict with Kinetic Mainnet's `127.0.0.2`.*
-4. Submit a Pull Request. Once merged, Atlas instances globally can pull this configuration.
+We have built a **fully automated, zero-touch registration pipeline** to make adding your network as seamless as possible:
+
+1. **Submit an Issue:** Go to the Issues tab and select the **Register Kinetic Network** template.
+2. **Fill out the Form:** Provide your Network Name, TLD, Seed Domain, and Bootstrap Nodes.
+3. **Automated Validation:** A GitHub Action will instantly spin up a Python bot (`validate_registration.py`) that will:
+   - Verify your requested TLD, Network ID, and Local Bind IP are 100% unique globally.
+   - Automatically extract the TCP port from your bootstrap nodes.
+   - Ping your Seed Domain URL to prove your network is alive and publicly accessible.
+4. **Automated Pull Request:** If your network passes validation, the bot will automatically generate your `networks/<tld>.json` configuration, update the `ATLAS.md` directory table, and open a Pull Request on your behalf!
+5. **Merge & Announce:** Once a maintainer clicks Merge, the bot will automatically announce your new network to the official Discord!
+
+#### Daily Uptime Monitoring (The Heartbeat Bot)
+Atlas maintains a pristine registry. Every midnight UTC, the `monitor_networks.py` script automatically runs and TCP pings the bootstrap nodes of every registered network.
+- If a network is alive, it retains its `🟢 Active` badge in `ATLAS.md`.
+- If a network fails the ping for **7 consecutive days**, it is automatically marked as `🔴 Offline` to protect users from dead forks.
 
 ---
 

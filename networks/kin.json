@@ -1,7 +1,0 @@
-{
-  "network_id": "kinetic",
-  "tld": "kin",
-  "bootstrap_nodes": [
-      "/ip4/127.0.0.1/tcp/6270/p2p/12D3KooWNyJevCKveriJH9UaF2hi6GvztGiyD5hUpgXj4ZSgdWMW"
-  ]
-}

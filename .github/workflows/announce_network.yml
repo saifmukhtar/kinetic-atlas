@@ -1,0 +1,26 @@
+name: Announce New Network
+
+on:
+  pull_request:
+    types: [closed]
+
+jobs:
+  announce:
+    if: github.event.pull_request.merged == true && startsWith(github.event.pull_request.title, 'Register Network TLD from Issue')
+    runs-on: ubuntu-latest
+    steps:
+      - name: Send Discord Webhook
+        env:
+          DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
+        run: |
+          if [ -z "$DISCORD_WEBHOOK_URL" ]; then
+            echo "DISCORD_WEBHOOK_URL is not set. Skipping announcement."
+            exit 0
+          fi
+          
+          # Extract the PR title to get context, or just send a generic success message
+          MESSAGE="🚀 A new network has just joined the **Atlas Global Registry** via PR #${{ github.event.pull_request.number }}!\n\nCheck out the updated directory in the repository!"
+          
+          curl -H "Content-Type: application/json" \
+               -d "{\"content\": \"$MESSAGE\"}" \
+               $DISCORD_WEBHOOK_URL
