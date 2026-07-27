@@ -28,6 +28,9 @@ fn get_or_create_config() -> anyhow::Result<AtlasConfig> {
         Err(_) => {
             tracing::error!("ATLAS-ERR: Failed to read {:?}. Creating default...", atlas_config_path);
             let default_config = AtlasConfig {
+                version: "1.0".to_string(),
+                whitelist: vec![],
+                blacklist: vec![],
                 bind_port: 17002, // Changed default to proxy port
                 kinetic_api: "http://127.0.0.2:16002".to_string(),
                 kinetic_token: "".to_string(),
@@ -53,7 +56,7 @@ async fn main() -> anyhow::Result<()> {
 
     // Load registry from GitHub-style folder
     let mut registry = TldRegistry::new();
-    registry.load_from_dir(&config.networks_dir);
+    registry.load_from_dir(&config.networks_dir, &config);
     let registry = Arc::new(tokio::sync::RwLock::new(registry));
 
     // Setup global broadcast for shutdown signals

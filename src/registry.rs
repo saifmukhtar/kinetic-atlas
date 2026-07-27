@@ -2,7 +2,7 @@ use std::collections::HashMap;
 use std::fs;
 use tracing::{error, info, warn};
 
-use crate::types::NetworkConfig;
+use crate::types::{AtlasConfig, NetworkConfig};
 
 pub struct TldRegistry {
     pub networks: HashMap<String, NetworkConfig>,
@@ -15,7 +15,7 @@ impl TldRegistry {
         }
     }
 
-    pub fn load_from_dir(&mut self, dir: &str) {
+    pub fn load_from_dir(&mut self, dir: &str, global_config: &AtlasConfig) {
         let path = std::path::Path::new(dir);
         if !path.exists() || !path.is_dir() {
             warn!("Networks directory '{}' not found or is not a directory.", dir);
@@ -34,6 +34,16 @@ impl TldRegistry {
                                 // Validate and format TLD
                                 let clean_tld = format!(".{}", config.tld.trim_start_matches('.'));
                                 
+                                // Apply Whitelist / Blacklist filtering
+                                let tld_name = config.tld.trim_start_matches('.').to_string();
+                                let is_whitelisted = global_config.whitelist.is_empty() || global_config.whitelist.contains(&tld_name);
+                                let is_blacklisted = !global_config.blacklist.is_empty() && global_config.blacklist.contains(&tld_name);
+
+                                if !is_whitelisted || is_blacklisted {
+                                    info!("ATLAS-INFO: Network '{}' is excluded by whitelist/blacklist settings. Skipping.", tld_name);
+                                    continue;
+                                }
+
                                 // Prevent collisions
                                 if self.networks.contains_key(&clean_tld) {
                                     error!("ATLAS-ERR: TLD Collision detected for {}. Skipping {:?}", clean_tld, path);

@@ -4,6 +4,11 @@ use std::collections::HashMap;
 /// Global configuration for the Atlas daemon.
 #[derive(Debug, Deserialize, Serialize, Clone)]
 pub struct AtlasConfig {
+    pub version: String,
+    #[serde(default)]
+    pub whitelist: Vec<String>,
+    #[serde(default)]
+    pub blacklist: Vec<String>,
     pub bind_port: u16,
     pub kinetic_api: String,
     pub kinetic_token: String,
@@ -21,6 +26,7 @@ fn default_registry_url() -> Option<String> {
 /// Configuration for a specific foreign network.
 #[derive(Debug, Deserialize, Serialize, Clone)]
 pub struct NetworkConfig {
+    pub version: String,
     pub network_id: String,
     pub tld: String,
     pub bootstrap_nodes: Vec<String>,

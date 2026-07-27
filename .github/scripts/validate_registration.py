@@ -125,7 +125,7 @@ def main():
     data = parse_issue_body(issue_body)
     
     # Validate required fields
-    required = ['name', 'tld', 'desc', 'url', 'seed', 'network_id', 'local_bind_ip']
+    required = ['version', 'name', 'tld', 'desc', 'url', 'seed', 'network_id', 'local_bind_ip']
     for req in required:
         if req not in data or not data[req]:
             print(f"Error: Missing required field '{req}'")
@@ -168,6 +168,7 @@ def main():
         
     # Generate JSON
     config = {
+        "version": data['version'],
         "network_id": data['network_id'],
         "tld": tld,
         "local_bind_ip": data['local_bind_ip'],

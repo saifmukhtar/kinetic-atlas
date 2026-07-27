@@ -37,7 +37,7 @@ pub fn start_auto_updater(
                     info!("Auto-Updater: Successfully synced {} files from GitHub.", count);
                     // Hot reload the registry
                     let mut reg = registry.write().await;
-                    reg.load_from_dir(&config.networks_dir);
+                    reg.load_from_dir(&config.networks_dir, &config);
                     info!("Auto-Updater: Hot-reloaded TldRegistry.");
                 }
                 Err(e) => {
