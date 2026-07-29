@@ -1,8 +1,8 @@
 use std::collections::HashMap;
 use std::sync::Arc;
-use tokio::sync::{mpsc, Mutex};
-use tracing::{info, error};
 use std::time::{Duration, Instant};
+use tokio::sync::{mpsc, Mutex};
+use tracing::{error, info};
 
 use crate::network::{KineticAtlasNode, NetworkCommand};
 use crate::types::NetworkConfig;
@@ -13,12 +13,14 @@ struct SwarmHandle {
 }
 
 #[derive(Clone)]
+/// Manages all running P2P swarms
 pub struct SwarmManager {
     swarms: Arc<Mutex<HashMap<String, SwarmHandle>>>,
     shutdown_tx: tokio::sync::broadcast::Sender<()>,
 }
 
 impl SwarmManager {
+    /// Initializes a new SwarmManager
     pub fn new(shutdown_tx: tokio::sync::broadcast::Sender<()>) -> Self {
         let manager = Self {
             swarms: Arc::new(Mutex::new(HashMap::new())),
@@ -39,7 +41,7 @@ impl SwarmManager {
                 let now = Instant::now();
                 // 10 minute timeout
                 let timeout = Duration::from_secs(10 * 60);
-                
+
                 lock.retain(|tld, handle| {
                     if now.duration_since(handle.last_used) > timeout {
                         info!("Shutting down idle libp2p swarm for {}", tld);
@@ -52,20 +54,22 @@ impl SwarmManager {
         });
     }
 
-    pub async fn get_or_spawn_swarm(&self, tld: &str, config: &NetworkConfig) -> Option<mpsc::Sender<NetworkCommand>> {
-        let mut lock = self.swarms.lock().await;
-        
-        if let Some(handle) = lock.get_mut(tld) {
-            handle.last_used = Instant::now();
-            return Some(handle.tx.clone());
+    /// Retrieves or starts a swarm for a specific TLD network
+    pub async fn get_or_spawn_swarm(
+        &self,
+        tld: &str,
+        config: &NetworkConfig,
+    ) -> Option<mpsc::Sender<NetworkCommand>> {
+        {
+            let mut lock = self.swarms.lock().await;
+            if let Some(handle) = lock.get_mut(tld) {
+                handle.last_used = Instant::now();
+                return Some(handle.tx.clone());
+            }
         }
 
         info!("Spawning new on-demand libp2p swarm for {}", tld);
 
-        let (tx, rx) = mpsc::channel(32);
-        let mut t_shutdown_rx = self.shutdown_tx.subscribe();
-        
-        let tld_clone = tld.to_string();
         let mut config_clone = config.clone();
 
         if let Some(seed_domain) = &config_clone.seed_domain {
@@ -75,6 +79,17 @@ impl SwarmManager {
                 config_clone.bootstrap_nodes.push(addr.to_string());
             }
         }
+
+        let mut lock = self.swarms.lock().await;
+        // Double check if another request spawned it while we were resolving DNS
+        if let Some(handle) = lock.get_mut(tld) {
+            handle.last_used = Instant::now();
+            return Some(handle.tx.clone());
+        }
+
+        let (tx, rx) = mpsc::channel(32);
+        let mut t_shutdown_rx = self.shutdown_tx.subscribe();
+        let tld_clone = tld.to_string();
 
         match KineticAtlasNode::new(config_clone.network_id, config_clone.bootstrap_nodes) {
             Ok(node) => {
@@ -87,10 +102,13 @@ impl SwarmManager {
                     }
                 });
 
-                lock.insert(tld.to_string(), SwarmHandle {
-                    tx: tx.clone(),
-                    last_used: Instant::now(),
-                });
+                lock.insert(
+                    tld.to_string(),
+                    SwarmHandle {
+                        tx: tx.clone(),
+                        last_used: Instant::now(),
+                    },
+                );
 
                 Some(tx)
             }
@@ -98,6 +116,23 @@ impl SwarmManager {
                 error!("Failed to initialize libp2p network for {}: {}", tld, e);
                 None
             }
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[tokio::test]
+    async fn test_swarm_manager_initialization() {
+        let (tx, _rx) = tokio::sync::broadcast::channel(1);
+        let manager = SwarmManager::new(tx);
+
+        // At start, swarms should be empty
+        {
+            let lock = manager.swarms.lock().await;
+            assert!(lock.is_empty());
         }
     }
 }

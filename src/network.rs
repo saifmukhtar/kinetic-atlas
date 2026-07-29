@@ -1,55 +1,77 @@
+#![allow(missing_docs)]
 use libp2p::{
-    identity, kad, noise, request_response, tcp, yamux, PeerId, Swarm, SwarmBuilder,
+    identity, kad, noise, request_response, tcp, yamux, PeerId, StreamProtocol, Swarm, SwarmBuilder,
 };
 use std::time::Duration;
 use tokio::sync::{mpsc, oneshot};
 use tracing::{info, warn};
 
+use crate::error::AtlasError;
 use crate::types::{ProxyRequest, ProxyResponse};
 
+/// Command sent to a swarm background task
 pub enum NetworkCommand {
+    /// Retrieve a DHT record
     GetRecord {
+        /// Domain string
         domain: String,
+        /// Response channel
         resp: oneshot::Sender<Option<Vec<u8>>>,
     },
+    /// Look up a peer's IP
     LookupPeer {
+        /// Peer ID string
         peer_id_str: String,
+        /// Response channel
         resp: oneshot::Sender<Option<std::net::IpAddr>>,
     },
+    /// Send a proxy request over libp2p
     SendProxyRequest {
+        /// Target Peer ID
         peer_id: PeerId,
+        /// Proxy Request payload
         request: ProxyRequest,
+        /// Response channel
         resp: oneshot::Sender<Option<ProxyResponse>>,
     },
 }
 
+/// The libp2p network behaviour combining DHT and Request-Response
+#[allow(missing_docs)]
 #[derive(libp2p::swarm::NetworkBehaviour)]
 pub struct AtlasBehaviour {
+    /// Kademlia DHT
     pub kad: kad::Behaviour<kad::store::MemoryStore>,
+    /// Request-Response Protocol
     pub request_response: request_response::cbor::Behaviour<ProxyRequest, ProxyResponse>,
 }
 
+/// The kinetic atlas node
 pub struct KineticAtlasNode {
     swarm: Swarm<AtlasBehaviour>,
     network_id: String,
 }
 
 impl KineticAtlasNode {
-    pub fn new(network_id: String, bootstrap_nodes: Vec<String>) -> anyhow::Result<Self> {
+    /// Create a new KineticAtlasNode
+    pub fn new(network_id: String, bootstrap_nodes: Vec<String>) -> Result<Self, AtlasError> {
         let local_key = identity::Keypair::generate_ed25519();
         let local_peer_id = PeerId::from(local_key.public());
-        
-        info!("Initializing libp2p for network {} as peer {}", network_id, local_peer_id);
 
-        let kad_protocol_name = libp2p::StreamProtocol::try_from_owned(format!(
-            "/{}/kad/2.0.0",
-            network_id
-        )).map_err(|e| anyhow::anyhow!("Invalid protocol name: {}", e))?;
+        info!(
+            "Initializing libp2p for network {} as peer {}",
+            network_id, local_peer_id
+        );
 
-        let proxy_protocol_name = libp2p::StreamProtocol::try_from_owned(format!(
-            "/{}/proxy/1.0.0",
-            network_id
-        )).map_err(|e| anyhow::anyhow!("Invalid proxy protocol name: {}", e))?;
+        let kad_protocol_name =
+            StreamProtocol::try_from_owned(format!("/{}/kad/2.0.0", network_id)).map_err(|e| {
+                AtlasError::NetworkInitFailed(format!("Invalid protocol name: {}", e))
+            })?;
+
+        let proxy_protocol_name =
+            StreamProtocol::try_from_owned(format!("/{}/proxy/1.0.0", network_id)).map_err(
+                |e| AtlasError::NetworkInitFailed(format!("Invalid proxy protocol name: {}", e)),
+            )?;
 
         let mut swarm = SwarmBuilder::with_existing_identity(local_key)
             .with_tokio()
@@ -57,31 +79,36 @@ impl KineticAtlasNode {
                 tcp::Config::default(),
                 noise::Config::new,
                 yamux::Config::default,
-            )?
-            .with_dns()?
+            )
+            .map_err(|e| AtlasError::NetworkInitFailed(format!("Transport config failed: {}", e)))?
+            .with_dns()
+            .map_err(|e| AtlasError::NetworkInitFailed(format!("DNS config failed: {}", e)))?
             .with_behaviour(move |key| {
                 // Kademlia Configuration
                 let mut kad_cfg = kad::Config::default();
                 kad_cfg.set_protocol_names(vec![kad_protocol_name]);
                 kad_cfg.set_max_packet_size(2 * 1024 * 1024); // 2 MB
                 kad_cfg.set_query_timeout(Duration::from_secs(5));
-                
+
                 let store = kad::store::MemoryStore::new(key.public().to_peer_id());
-                let mut kademlia = kad::Behaviour::with_config(key.public().to_peer_id(), store, kad_cfg);
+                let mut kademlia =
+                    kad::Behaviour::with_config(key.public().to_peer_id(), store, kad_cfg);
                 kademlia.set_mode(Some(kad::Mode::Client));
 
                 // Request-Response Configuration
-                let protocols = std::iter::once((proxy_protocol_name, request_response::ProtocolSupport::Full));
+                let protocols =
+                    std::iter::once((proxy_protocol_name, request_response::ProtocolSupport::Full));
                 let rr_config = request_response::Config::default()
                     .with_request_timeout(Duration::from_secs(15));
-                
+
                 let request_response = request_response::cbor::Behaviour::new(protocols, rr_config);
 
                 AtlasBehaviour {
                     kad: kademlia,
                     request_response,
                 }
-            })?
+            })
+            .map_err(|e| AtlasError::NetworkInitFailed(format!("Behaviour config failed: {}", e)))?
             .with_swarm_config(|cfg| cfg.with_idle_connection_timeout(Duration::from_secs(60)))
             .build();
 
@@ -91,8 +118,11 @@ impl KineticAtlasNode {
             if let Ok(multiaddr) = node_str.parse::<libp2p::Multiaddr>() {
                 if let Some(libp2p::multiaddr::Protocol::P2p(peer_id)) = multiaddr.iter().last() {
                     // Always add to routing table
-                    swarm.behaviour_mut().kad.add_address(&peer_id, multiaddr.clone());
-                    
+                    swarm
+                        .behaviour_mut()
+                        .kad
+                        .add_address(&peer_id, multiaddr.clone());
+
                     if dials < max_dials {
                         if let Err(e) = swarm.dial(multiaddr.clone()) {
                             warn!("Failed to dial bootstrap node {}: {:?}", multiaddr, e);
@@ -103,17 +133,18 @@ impl KineticAtlasNode {
                 }
             }
         }
-        
+
         if let Err(e) = swarm.behaviour_mut().kad.bootstrap() {
-            warn!("Failed to bootstrap Kademlia DHT for {}: {:?}", network_id, e);
+            warn!(
+                "Failed to bootstrap Kademlia DHT for {}: {:?}",
+                network_id, e
+            );
         }
 
-        Ok(Self {
-            swarm,
-            network_id,
-        })
+        Ok(Self { swarm, network_id })
     }
 
+    /// Starts the node's background event loop
     pub async fn run(mut self, mut query_rx: mpsc::Receiver<NetworkCommand>) {
         use libp2p::futures::StreamExt;
         let mut pending_queries = std::collections::HashMap::new();
@@ -122,15 +153,15 @@ impl KineticAtlasNode {
 
         loop {
             tokio::select! {
-                Some(cmd) = query_rx.recv() => {
-                    match cmd {
-                        NetworkCommand::GetRecord { domain, resp } => {
+                cmd_opt = query_rx.recv() => {
+                    match cmd_opt {
+                        Some(NetworkCommand::GetRecord { domain, resp }) => {
                             info!("Network {} querying DHT for domain: {}", self.network_id, domain);
                             let key = kad::RecordKey::new(&domain);
                             let query_id = self.swarm.behaviour_mut().kad.get_record(key);
                             pending_queries.insert(query_id, resp);
                         }
-                        NetworkCommand::LookupPeer { peer_id_str, resp } => {
+                        Some(NetworkCommand::LookupPeer { peer_id_str, resp }) => {
                             if let Ok(peer_id) = peer_id_str.parse::<PeerId>() {
                                 info!("Network {} dialing peer {} for IP resolution", self.network_id, peer_id);
                                 if self.swarm.dial(peer_id).is_ok() {
@@ -142,10 +173,14 @@ impl KineticAtlasNode {
                                 let _ = resp.send(None);
                             }
                         }
-                        NetworkCommand::SendProxyRequest { peer_id, request, resp } => {
+                        Some(NetworkCommand::SendProxyRequest { peer_id, request, resp }) => {
                             info!("Network {} sending proxy request to peer {}", self.network_id, peer_id);
                             let req_id = self.swarm.behaviour_mut().request_response.send_request(&peer_id, request);
                             pending_requests.insert(req_id, resp);
+                        }
+                        None => {
+                            info!("Network {} channel closed. Shutting down libp2p node.", self.network_id);
+                            break;
                         }
                     }
                 }

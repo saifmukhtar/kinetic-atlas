@@ -54,6 +54,8 @@ def parse_issue_body(body):
             elif 'description' in header: current_key = 'desc'
             elif 'project website' in header: current_key = 'url'
             elif 'repository url' in header: current_key = 'repo'
+            elif 'binary download' in header: current_key = 'binary'
+            elif 'logo url' in header: current_key = 'logo_url'
             elif 'seed domain' in header: current_key = 'seed'
             elif 'network id' in header: current_key = 'network_id'
             elif 'local bind ip' in header: current_key = 'local_bind_ip'
@@ -176,8 +178,44 @@ def main():
         "bootstrap_nodes": unique_nodes,
     }
     
+    # Check Logo
+    if data.get('logo_url'):
+        logo_url = data['logo_url'].strip()
+        print(f"Validating logo URL: {logo_url}")
+        try:
+            req = urllib.request.Request(logo_url, method="HEAD", headers={'User-Agent': 'Mozilla/5.0'})
+            with urllib.request.urlopen(req, timeout=5) as response:
+                content_length = response.headers.get('Content-Length')
+                content_type = response.headers.get('Content-Type')
+                
+                if content_length and int(content_length) > 50000:
+                    print(f"Error: Logo size ({content_length} bytes) exceeds 50KB limit.")
+                    sys.exit(1)
+                    
+                if content_type not in ['image/png', 'image/svg+xml']:
+                    print(f"Error: Logo must be PNG or SVG. Got {content_type}.")
+                    sys.exit(1)
+                    
+            print("Logo passed HEAD check. Downloading...")
+            os.makedirs("logos", exist_ok=True)
+            ext = ".png" if content_type == "image/png" else ".svg"
+            logo_path = f"logos/{tld}{ext}"
+            
+            get_req = urllib.request.Request(logo_url, headers={'User-Agent': 'Mozilla/5.0'})
+            with urllib.request.urlopen(get_req, timeout=10) as get_response:
+                with open(logo_path, "wb") as f:
+                    f.write(get_response.read())
+                    
+            config["logo"] = f"https://raw.githubusercontent.com/saifmukhtar/kinetic-atlas/main/{logo_path}"
+        except Exception as e:
+            print(f"Error validating or downloading logo: {e}")
+            sys.exit(1)
+    
     if data.get('ipfs'):
         config["ipfs_gateway"] = data['ipfs']
+        
+    if data.get('binary'):
+        config["binary_download"] = data['binary']
         
     json_path = f"networks/{tld}.json"
     with open(json_path, 'w') as f:
@@ -185,7 +223,22 @@ def main():
         
     # Update ATLAS.md
     update_atlas_md(tld, data['name'], data.get('network_type', 'Public'), data['desc'], data['local_bind_ip'], data['url'], data.get('repo', ''))
-    print("Successfully processed registration.")
+    
+    # Aggregate all networks into root index.json
+    all_networks = []
+    if os.path.exists("networks"):
+        for filename in sorted(os.listdir("networks")):
+            if filename.endswith(".json"):
+                with open(os.path.join("networks", filename), 'r') as nf:
+                    try:
+                        all_networks.append(json.load(nf))
+                    except Exception as e:
+                        print(f"Error loading {filename}: {e}")
+                        
+    with open("index.json", "w") as idx_file:
+        json.dump(all_networks, idx_file, indent=4)
+        
+    print("Successfully processed registration and updated index.json.")
 
 if __name__ == '__main__':
     main()

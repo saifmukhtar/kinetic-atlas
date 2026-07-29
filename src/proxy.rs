@@ -1,66 +1,88 @@
 use axum::{
     body::Body,
     extract::{Request, State},
-    response::{IntoResponse, Response},
+    response::Response,
     routing::any,
     Router,
 };
-use hyper::StatusCode;
-use std::sync::Arc;
-use tracing::{info, warn};
 use libp2p::PeerId;
 use std::str::FromStr;
+use std::sync::Arc;
+use tracing::{info, warn};
 
+use crate::error::AtlasError;
+use crate::network::NetworkCommand;
 use crate::registry::TldRegistry;
 use crate::swarm_manager::SwarmManager;
-use crate::network::NetworkCommand;
-use crate::types::{DnsZone, DnsRecord, RevealPayload, ProxyRequest};
+use crate::types::{DnsRecord, DnsZone, ProxyRequest, RevealPayload};
 
+/// Proxy state
 #[derive(Clone)]
 pub struct ProxyState {
+    /// Registry
     pub registry: Arc<tokio::sync::RwLock<TldRegistry>>,
+    /// Swarms
     pub swarms: SwarmManager,
+    /// Global config
     pub global_config: Arc<crate::types::AtlasConfig>,
 }
 
-pub async fn start_proxy_server(port: u16, state: ProxyState) -> anyhow::Result<()> {
+/// Starts proxy server
+pub async fn start_proxy_server(port: u16, state: ProxyState) -> Result<(), AtlasError> {
     let app = Router::new()
         .route("/*path", any(handle_proxy_request))
         .route("/", any(handle_proxy_request))
         .with_state(state);
 
-    let addr = format!("127.0.0.1:{}", port);
-    let listener = tokio::net::TcpListener::bind(&addr).await?;
+    let addr = format!("{}:{}", crate::constants::DEFAULT_BIND_IP, port);
+    let listener = tokio::net::TcpListener::bind(&addr)
+        .await
+        .map_err(|e| AtlasError::ConfigError(e.to_string()))?;
     info!("Atlas HTTP Proxy listening on {}", addr);
 
-    axum::serve(listener, app).await?;
+    axum::serve(listener, app)
+        .await
+        .map_err(|e| AtlasError::ConfigError(e.to_string()))?;
     Ok(())
 }
 
 async fn handle_proxy_request(
     State(state): State<ProxyState>,
     req: Request<Body>,
-) -> Response {
+) -> Result<Response, AtlasError> {
     let host = match req.headers().get("host") {
         Some(h) => match h.to_str() {
             Ok(s) => s.split(':').next().unwrap_or(""), // Strip port
-            Err(_) => return StatusCode::BAD_REQUEST.into_response(),
+            Err(_) => {
+                return Err(AtlasError::InvalidProxyRequest(
+                    "Invalid host header format".into(),
+                ))
+            }
         },
-        None => return StatusCode::BAD_REQUEST.into_response(),
+        None => {
+            return Err(AtlasError::InvalidProxyRequest(
+                "Missing host header".into(),
+            ))
+        }
     };
 
-    let domain = host.to_lowercase();
-    
+    let full_domain = host.to_lowercase();
+
     // Extract TLD
-    let tld = if let Some(idx) = domain.rfind('.') {
-        &domain[idx..]
+    let tld = if let Some(idx) = full_domain.rfind('.') {
+        &full_domain[idx..]
     } else {
-        return (StatusCode::BAD_REQUEST, "Invalid TLD").into_response();
+        return Err(AtlasError::InvalidProxyRequest(
+            "Invalid domain structure: No TLD".into(),
+        ));
     };
 
     let clean_tld = tld.to_string();
 
-    info!("Intercepted HTTP request for host: {} (TLD: {})", domain, clean_tld);
+    info!(
+        "Intercepted HTTP request for host: {} (TLD: {})",
+        full_domain, clean_tld
+    );
 
     // 1. Check Registry
     let registry_read = state.registry.read().await;
@@ -68,23 +90,47 @@ async fn handle_proxy_request(
         Some(c) => c,
         None => {
             warn!("Unknown TLD: {}. Not found in Atlas registry.", clean_tld);
-            return (StatusCode::NOT_FOUND, "Network not supported by Atlas").into_response();
+            return Err(AtlasError::TldBlacklisted);
         }
     };
     drop(registry_read);
+
+    // Extract base domain and subdomain
+    let (base_domain, subdomain) = match extract_base_domain_and_subdomain(&full_domain, &clean_tld)
+    {
+        Some(res) => res,
+        None => {
+            return Err(AtlasError::InvalidProxyRequest(
+                "Could not parse base domain".into(),
+            ))
+        }
+    };
+
+    info!(
+        "Resolved base_domain: {}, subdomain: {}",
+        base_domain, subdomain
+    );
 
     // 2. Get or Spawn Swarm
     let channel = match state.swarms.get_or_spawn_swarm(&clean_tld, &config).await {
         Some(tx) => tx,
         None => {
-            return (StatusCode::INTERNAL_SERVER_ERROR, "Failed to connect to network").into_response();
+            return Err(AtlasError::NetworkInitFailed(format!(
+                "Failed to connect to network for TLD {}",
+                clean_tld
+            )));
         }
     };
 
     // Extract Request details
     let method = req.method().as_str().to_string();
-    let path = req.uri().path_and_query().map(|x| x.as_str()).unwrap_or("/").to_string();
-    
+    let path = req
+        .uri()
+        .path_and_query()
+        .map(|x| x.as_str())
+        .unwrap_or("/")
+        .to_string();
+
     let mut proxy_headers: Vec<(std::sync::Arc<str>, std::sync::Arc<str>)> = Vec::new();
     for (name, value) in req.headers() {
         if let Ok(v) = value.to_str() {
@@ -92,130 +138,288 @@ async fn handle_proxy_request(
         }
     }
 
-    let body_bytes = match axum::body::to_bytes(req.into_body(), 5 * 1024 * 1024).await { // 5MB limit
-        Ok(b) => b,
-        Err(e) => {
-            warn!("Failed to read request body: {}", e);
-            return (StatusCode::BAD_REQUEST, "Failed to read body").into_response();
-        }
-    };
-
-    // 3. Resolve Domain from DHT
+    // 3. Resolve Domain from DHT using base_domain
     let (tx, rx) = tokio::sync::oneshot::channel();
-    if channel.send(NetworkCommand::GetRecord { domain: domain.clone(), resp: tx }).await.is_err() {
-        return (StatusCode::INTERNAL_SERVER_ERROR, "Failed to communicate with swarm").into_response();
+    if channel
+        .send(NetworkCommand::GetRecord {
+            domain: base_domain.clone(),
+            resp: tx,
+        })
+        .await
+        .is_err()
+    {
+        return Err(AtlasError::DnsResolutionFailed(
+            "Failed to communicate with swarm".into(),
+        ));
     }
 
     let dht_bytes = match rx.await {
         Ok(Some(bytes)) => bytes,
-        _ => return (StatusCode::NOT_FOUND, "Domain not found in DHT").into_response(),
+        _ => {
+            return Err(AtlasError::DnsResolutionFailed(
+                "Domain not found in DHT".into(),
+            ))
+        }
     };
 
     // Parse RevealPayload and DnsZone
     let reveal: RevealPayload = match serde_json::from_slice(&dht_bytes) {
         Ok(r) => r,
-        Err(_) => return (StatusCode::INTERNAL_SERVER_ERROR, "Invalid DHT payload format").into_response(),
+        Err(_) => {
+            return Err(AtlasError::DnsResolutionFailed(
+                "Invalid DHT payload format".into(),
+            ));
+        }
     };
 
     let zone: DnsZone = match serde_json::from_slice(&reveal.payload) {
         Ok(z) => z,
-        Err(_) => return (StatusCode::INTERNAL_SERVER_ERROR, "Invalid DNS zone format").into_response(),
+        Err(_) => {
+            return Err(AtlasError::DnsResolutionFailed(
+                "Invalid DNS zone format".into(),
+            ));
+        }
     };
 
-    let records = match zone.records.get("@").or_else(|| zone.records.get("www")) {
+    let records = match zone.records.get(&subdomain) {
         Some(r) => r,
-        None => return (StatusCode::NOT_FOUND, "No usable records in domain zone").into_response(),
+        None => {
+            if subdomain == "@" {
+                match zone.records.get("www") {
+                    Some(r) => r,
+                    None => {
+                        return Err(AtlasError::DnsResolutionFailed(
+                            "No usable records in domain zone".into(),
+                        ));
+                    }
+                }
+            } else {
+                return Err(AtlasError::DnsResolutionFailed(
+                    "Subdomain not found in zone".into(),
+                ));
+            }
+        }
     };
 
-    let mut target_record = None;
+    let mut target_records = Vec::new();
     for record in records {
         match record {
             DnsRecord::IPFS(_) | DnsRecord::PeerId(_) => {
-                target_record = Some(record.clone());
-                break;
+                target_records.push(record.clone());
             }
             _ => {}
         }
     }
 
-    // 4. Fetch Data
-    match target_record {
-        Some(DnsRecord::IPFS(cid)) => {
-            info!("Routing {} to IPFS: {}", domain, cid);
-            let gateway = state.global_config.override_ipfs_gateway.as_deref()
-                .unwrap_or_else(|| config.ipfs_gateway.as_deref().unwrap_or("http://127.0.0.1:8080"));
-            let ipfs_url = format!("{}/ipfs/{}{}", gateway, cid, if path == "/" { "" } else { &path });
-            
-            let reqwest_client = reqwest::Client::new();
-            let mut builder = reqwest_client.request(
-                reqwest::Method::from_str(&method).unwrap_or(reqwest::Method::GET),
-                &ipfs_url,
-            );
-            
-            for (k, v) in &proxy_headers {
-                if k.as_ref() != "host" {
-                    builder = builder.header(k.as_ref(), v.as_ref());
-                }
-            }
-            builder = builder.body(body_bytes);
+    if target_records.is_empty() {
+        return Err(AtlasError::DnsResolutionFailed(
+            "No target records found".into(),
+        ));
+    }
 
-            match builder.send().await {
-                Ok(res) => {
-                    let mut builder = axum::response::Response::builder()
-                        .status(res.status().as_u16());
-                    
-                    for (k, v) in res.headers() {
-                        builder = builder.header(k.as_str(), v.as_bytes());
-                    }
-                    
-                    let body = res.bytes().await.unwrap_or_default();
-                    builder.body(Body::from(body)).unwrap_or_else(|_| (StatusCode::INTERNAL_SERVER_ERROR).into_response())
-                }
-                Err(e) => {
-                    warn!("IPFS gateway failed: {}", e);
-                    (StatusCode::BAD_GATEWAY, "IPFS Gateway Error").into_response()
-                }
-            }
+    // Buffer the request body once so we can retry multiple gateways/peers if needed.
+    // 1GB limit to avoid the previous 5MB limit breaking uploads.
+    let body_bytes = match axum::body::to_bytes(req.into_body(), 1024 * 1024 * 1024).await {
+        Ok(b) => b.to_vec(),
+        Err(e) => {
+            warn!("Failed to read request body: {}", e);
+            return Err(AtlasError::InvalidProxyRequest(
+                "Failed to read body".into(),
+            ));
         }
-        Some(DnsRecord::PeerId(peer_str)) => {
-            info!("Routing {} to PeerId: {}", domain, peer_str);
-            let peer_id = match PeerId::from_str(&peer_str) {
-                Ok(p) => p,
-                Err(_) => return (StatusCode::INTERNAL_SERVER_ERROR, "Invalid PeerId in zone").into_response(),
-            };
+    };
 
-            let proxy_req = ProxyRequest {
-                method: method.into(),
-                path: path.into(),
-                headers: proxy_headers,
-                body: body_bytes,
-            };
+    let mut last_error = None;
 
-            let (tx, rx) = tokio::sync::oneshot::channel();
-            if channel.send(NetworkCommand::SendProxyRequest {
-                peer_id,
-                request: proxy_req,
-                resp: tx,
-            }).await.is_err() {
-                return (StatusCode::INTERNAL_SERVER_ERROR, "Failed to send proxy request to swarm").into_response();
-            }
+    for target_record in target_records {
+        match target_record {
+            DnsRecord::IPFS(cid) => {
+                info!("Routing {} to IPFS: {}", full_domain, cid);
+                let gateway = state
+                    .global_config
+                    .override_ipfs_gateway
+                    .as_deref()
+                    .unwrap_or_else(|| {
+                        config
+                            .ipfs_gateway
+                            .as_deref()
+                            .unwrap_or(crate::constants::DEFAULT_IPFS_GATEWAY)
+                    });
+                let ipfs_url = format!(
+                    "{}/ipfs/{}{}",
+                    gateway,
+                    cid,
+                    if path == "/" { "" } else { &path }
+                );
 
-            match rx.await {
-                Ok(Some(proxy_res)) => {
-                    let mut builder = axum::response::Response::builder()
-                        .status(proxy_res.status);
-                    
-                    for (k, v) in proxy_res.headers {
+                let reqwest_client = reqwest::Client::new();
+                let mut builder = reqwest_client.request(
+                    reqwest::Method::from_str(&method).unwrap_or(reqwest::Method::GET),
+                    &ipfs_url,
+                );
+
+                for (k, v) in &proxy_headers {
+                    if k.as_ref() != "host" {
                         builder = builder.header(k.as_ref(), v.as_ref());
                     }
-                    
-                    builder.body(Body::from(proxy_res.body)).unwrap_or_else(|_| (StatusCode::INTERNAL_SERVER_ERROR).into_response())
                 }
-                _ => {
-                    (StatusCode::BAD_GATEWAY, "P2P Proxy Request Failed or Timed Out").into_response()
+
+                builder = builder.body(body_bytes.clone());
+
+                match builder.send().await {
+                    Ok(res) => {
+                        let mut builder =
+                            axum::response::Response::builder().status(res.status().as_u16());
+
+                        for (k, v) in res.headers() {
+                            builder = builder.header(k.as_str(), v.as_bytes());
+                        }
+
+                        // Stream response to fix silent 5MB download corruption
+                        let stream = res.bytes_stream();
+                        let body = Body::from_stream(stream);
+                        return builder
+                            .body(body)
+                            .map_err(|_| AtlasError::ProxyTargetFailed);
+                    }
+                    Err(e) => {
+                        warn!("IPFS gateway failed: {}", e);
+                        last_error = Some("IPFS Gateway Error");
+                        continue;
+                    }
                 }
             }
+            DnsRecord::PeerId(peer_str) => {
+                info!("Routing {} to PeerId: {}", full_domain, peer_str);
+                let peer_id = match PeerId::from_str(&peer_str) {
+                    Ok(p) => p,
+                    Err(_) => {
+                        warn!("Invalid PeerId in zone: {}", peer_str);
+                        last_error = Some("Invalid PeerId in zone");
+                        continue;
+                    }
+                };
+
+                let proxy_req = ProxyRequest {
+                    method: method.clone().into(),
+                    path: path.clone().into(),
+                    headers: proxy_headers.clone(),
+                    body: body_bytes.clone().into(),
+                };
+
+                let (tx, rx) = tokio::sync::oneshot::channel();
+                if channel
+                    .send(NetworkCommand::SendProxyRequest {
+                        peer_id,
+                        request: proxy_req,
+                        resp: tx,
+                    })
+                    .await
+                    .is_err()
+                {
+                    last_error = Some("Failed to send proxy request to swarm");
+                    continue;
+                }
+
+                match rx.await {
+                    Ok(Some(proxy_res)) => {
+                        let mut builder =
+                            axum::response::Response::builder().status(proxy_res.status);
+
+                        for (k, v) in proxy_res.headers {
+                            builder = builder.header(k.as_ref(), v.as_ref());
+                        }
+
+                        return builder
+                            .body(Body::from(proxy_res.body))
+                            .map_err(|_| AtlasError::ProxyTargetFailed);
+                    }
+                    _ => {
+                        warn!("P2P Proxy Request Failed or Timed Out");
+                        last_error = Some("P2P Proxy Request Failed or Timed Out");
+                        continue;
+                    }
+                }
+            }
+            _ => continue,
         }
-        _ => (StatusCode::NOT_IMPLEMENTED, "Unsupported DNS Record Type").into_response(),
+    }
+
+    if let Some(err) = last_error {
+        warn!("Proxy targets failed with last error: {}", err);
+    }
+
+    Err(AtlasError::ProxyTargetFailed)
+}
+
+/// Extracts the base domain and subdomains from a full host string, given a TLD
+pub fn extract_base_domain_and_subdomain(
+    full_domain: &str,
+    clean_tld: &str,
+) -> Option<(String, String)> {
+    let domain_without_tld = full_domain.trim_end_matches(clean_tld);
+    let parts: Vec<&str> = domain_without_tld.split('.').collect();
+
+    if parts.is_empty() || parts[0].is_empty() {
+        return None;
+    }
+
+    let registered_name = parts.last().unwrap();
+    let base_domain = format!("{}{}", registered_name, clean_tld);
+    let subdomain = if parts.len() > 1 {
+        parts[..parts.len() - 1].join(".")
+    } else {
+        "@".to_string()
+    };
+
+    Some((base_domain, subdomain))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_extract_domain() {
+        assert_eq!(
+            extract_base_domain_and_subdomain("test.kin", ".kin"),
+            Some(("test.kin".to_string(), "@".to_string()))
+        );
+        assert_eq!(
+            extract_base_domain_and_subdomain("api.test.kin", ".kin"),
+            Some(("test.kin".to_string(), "api".to_string()))
+        );
+        assert_eq!(
+            extract_base_domain_and_subdomain("v1.api.test.kin", ".kin"),
+            Some(("test.kin".to_string(), "v1.api".to_string()))
+        );
+        assert_eq!(extract_base_domain_and_subdomain(".kin", ".kin"), None);
+    }
+    use proptest::prelude::*;
+
+    proptest! {
+        #[test]
+        fn test_extract_domain_proptest(subdomain in "[a-z0-9]+(\\.[a-z0-9]+)*", name in "[a-z0-9]+", tld in "\\.[a-z]+") {
+            let full_domain = format!("{}.{}{}", subdomain, name, tld);
+            let result = extract_base_domain_and_subdomain(&full_domain, &tld);
+
+            assert!(result.is_some());
+            let (base, sub) = result.unwrap();
+
+            assert_eq!(base, format!("{}{}", name, tld));
+            assert_eq!(sub, subdomain);
+        }
+
+        #[test]
+        fn test_extract_domain_no_subdomain(name in "[a-z0-9]+", tld in "\\.[a-z]+") {
+            let full_domain = format!("{}{}", name, tld);
+            let result = extract_base_domain_and_subdomain(&full_domain, &tld);
+
+            assert!(result.is_some());
+            let (base, sub) = result.unwrap();
+
+            assert_eq!(base, format!("{}{}", name, tld));
+            assert_eq!(sub, "@");
+        }
     }
 }

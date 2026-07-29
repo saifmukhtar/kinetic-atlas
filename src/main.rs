@@ -1,54 +1,67 @@
-pub mod network;
-pub mod registry;
-pub mod swarm_manager;
-pub mod types;
-pub mod proxy;
-pub mod dns_tree;
-pub mod updater;
+#![warn(missing_docs)]
 
-use registry::TldRegistry;
-use swarm_manager::SwarmManager;
-use proxy::{start_proxy_server, ProxyState};
+//! Main entry point for the Kinetic Atlas daemon.
+//!
+//! This binary initializes the configuration, loads the TLD registry, starts the P2P
+//! swarm manager, and binds the HTTP proxy server to the configured port.
+
+use kinetic_atlas::constants;
+use kinetic_atlas::error::AtlasError;
+use kinetic_atlas::proxy::{start_proxy_server, ProxyState};
+use kinetic_atlas::registry::TldRegistry;
+use kinetic_atlas::swarm_manager::SwarmManager;
+use kinetic_atlas::types::AtlasConfig;
+use kinetic_atlas::updater;
 use std::sync::Arc;
 use tracing::info;
-use types::AtlasConfig;
 
-fn get_or_create_config() -> anyhow::Result<AtlasConfig> {
+fn get_or_create_config() -> Result<AtlasConfig, AtlasError> {
     let base_dir = dirs::data_local_dir()
         .unwrap_or_else(|| std::path::PathBuf::from("."))
         .join("kinetic_atlas");
-        
+
     let _ = std::fs::create_dir_all(&base_dir);
     let atlas_config_path = base_dir.join("atlas.json");
     match std::fs::read_to_string(&atlas_config_path) {
         Ok(content) => {
-            let config = serde_json::from_str(&content)?;
+            let config = serde_json::from_str(&content)
+                .map_err(|e| AtlasError::ConfigError(e.to_string()))?;
             Ok(config)
         }
         Err(_) => {
-            tracing::error!("ATLAS-ERR: Failed to read {:?}. Creating default...", atlas_config_path);
+            tracing::error!(
+                "ATLAS-ERR: Failed to read {:?}. Creating default...",
+                atlas_config_path
+            );
             let default_config = AtlasConfig {
                 version: "1.0".to_string(),
                 whitelist: vec![],
                 blacklist: vec![],
-                bind_port: 17002, // Changed default to proxy port
-                kinetic_api: "http://127.0.0.2:16002".to_string(),
+                bind_port: constants::DEFAULT_PROXY_PORT,
+                kinetic_api: constants::DEFAULT_KINETIC_API.to_string(),
                 kinetic_token: "".to_string(),
                 networks_dir: base_dir.join("networks").to_string_lossy().to_string(),
-                registry_url: Some("https://api.github.com/repos/saifmukhtar/kinetic-atlas/contents/networks".to_string()),
+                registry_url: Some(
+                    "https://api.github.com/repos/saifmukhtar/kinetic-atlas/contents/networks"
+                        .to_string(),
+                ),
                 override_ipfs_gateway: None,
             };
             std::fs::write(
                 &atlas_config_path,
-                serde_json::to_string_pretty(&default_config)?,
-            )?;
+                serde_json::to_string_pretty(&default_config)
+                    .map_err(|e| AtlasError::ConfigError(e.to_string()))?,
+            )
+            .map_err(|e| {
+                AtlasError::ConfigError(format!("Failed to write default config: {}", e))
+            })?;
             Ok(default_config)
         }
     }
 }
 
 #[tokio::main]
-async fn main() -> anyhow::Result<()> {
+async fn main() -> Result<(), AtlasError> {
     tracing_subscriber::fmt::init();
     info!("Starting Kinetic Atlas HTTP Proxy Daemon...");
 
@@ -82,7 +95,9 @@ async fn main() -> anyhow::Result<()> {
 
     updater::start_auto_updater(config.clone(), registry.clone());
 
-    start_proxy_server(config.bind_port, state).await?;
+    start_proxy_server(config.bind_port, state)
+        .await
+        .map_err(|e| AtlasError::ConfigError(e.to_string()))?;
 
     Ok(())
 }
