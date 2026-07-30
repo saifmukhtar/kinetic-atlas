@@ -48,6 +48,9 @@ pub struct NetworkConfig {
     /// API port
     #[serde(default)]
     pub api_port: Option<u16>,
+    /// Repository URL
+    #[serde(default)]
+    pub repo: Option<String>,
     /// Seed domain
     #[serde(default)]
     pub seed_domain: Option<String>,

@@ -204,6 +204,9 @@ def main():
     
     if data.get('ipfs'):
         config["ipfs_gateway"] = data['ipfs']
+
+    if data.get('repo'):
+        config["repo"] = data['repo']
         
     if data.get('binary'):
         config["binary_download"] = data['binary']
