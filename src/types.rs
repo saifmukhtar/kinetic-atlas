@@ -45,6 +45,9 @@ pub struct NetworkConfig {
     pub bootstrap_nodes: Vec<String>,
     /// Local bind IP
     pub local_bind_ip: String,
+    /// API port
+    #[serde(default)]
+    pub api_port: Option<u16>,
     /// Seed domain
     #[serde(default)]
     pub seed_domain: Option<String>,

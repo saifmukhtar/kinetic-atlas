@@ -121,6 +121,15 @@ body:
     validations:
       required: true
 
+  - type: input
+    id: api_port
+    attributes:
+      label: API Port
+      description: The daemon's HTTP REST API port (e.g., 16002).
+      placeholder: "16002"
+    validations:
+      required: true
+
   - type: textarea
     id: bootstrap_nodes
     attributes:

@@ -3,11 +3,9 @@ import sys
 import re
 import socket
 import json
-import json
 import urllib.request
 
 def check_url(url):
-    import urllib.request
     try:
         req = urllib.request.Request(f"http://{url}", headers={'User-Agent': 'Mozilla/5.0'})
         urllib.request.urlopen(req, timeout=5)
@@ -24,9 +22,7 @@ def check_url(url):
 def ping_host(host, port, timeout=3):
     """Attempt a TCP connection to the specified host and port."""
     try:
-        # Resolve hostname to IP first
         ip = socket.gethostbyname(host)
-        # Attempt connection
         s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         s.settimeout(timeout)
         s.connect((ip, int(port)))
@@ -47,7 +43,6 @@ def parse_issue_body(body):
         if line.startswith('### '):
             if current_key:
                 data[current_key] = '\n'.join(current_val).strip()
-            # Map headers to keys
             header = line[4:].strip().lower()
             if 'network name' in header: current_key = 'name'
             elif 'tld suffix' in header: current_key = 'tld'
@@ -59,6 +54,7 @@ def parse_issue_body(body):
             elif 'seed domain' in header: current_key = 'seed'
             elif 'network id' in header: current_key = 'network_id'
             elif 'local bind ip' in header: current_key = 'local_bind_ip'
+            elif 'api port' in header: current_key = 'api_port'
             elif 'bootstrap nodes' in header: current_key = 'nodes'
             elif 'ipfs gateway' in header: current_key = 'ipfs'
             else: current_key = None
@@ -75,9 +71,7 @@ def update_atlas_md(tld, name, network_type, desc, local_bind_ip, url, repo, sta
     with open('ATLAS.md', 'r') as f:
         content = f.read()
         
-    # Find the table rows
     lines = content.split('\n')
-    new_lines = []
     table_started = False
     table_rows = []
     header_lines = []
@@ -91,27 +85,20 @@ def update_atlas_md(tld, name, network_type, desc, local_bind_ip, url, repo, sta
         if not table_started:
             header_lines.append(line)
         elif line.startswith('|'):
-            # Parse existing row
             parts = [p.strip() for p in line.split('|')[1:-1]]
             if len(parts) >= 5:
-                # Store tuple (tld, line) for sorting
                 row_tld = parts[0].replace('`', '')
                 table_rows.append((row_tld, line))
         else:
             header_lines.append(line)
             
-    # Add new row
     repo_link = f"[{repo}]({repo})" if repo else "N/A"
     url_link = f"[{url}]({url})" if url else "N/A"
     new_row = f"| `{tld}` | {name} | {network_type} | {status} | {desc} | {local_bind_ip} | {url_link} | {repo_link} |"
-    # Remove existing row with same TLD if it exists
     table_rows = [r for r in table_rows if r[0] != tld]
     table_rows.append((tld, new_row))
-    
-    # Sort alphabetically by TLD
     table_rows.sort(key=lambda x: x[0])
     
-    # Reconstruct
     with open('ATLAS.md', 'w') as f:
         f.write('\n'.join(header_lines[:header_lines.index('| :---') + 1]) + '\n')
         for _, row in table_rows:
@@ -120,14 +107,13 @@ def update_atlas_md(tld, name, network_type, desc, local_bind_ip, url, repo, sta
 def main():
     issue_body = os.environ.get('ISSUE_BODY', '')
     issue_user = os.environ.get('ISSUE_USER', '')
-    labels = os.environ.get('ISSUE_LABELS', '')
     
     print(f"Processing issue from {issue_user}...")
     
     data = parse_issue_body(issue_body)
     
     # Validate required fields
-    required = ['version', 'name', 'tld', 'desc', 'url', 'seed', 'network_id', 'local_bind_ip']
+    required = ['version', 'name', 'tld', 'desc', 'url', 'seed', 'network_id', 'local_bind_ip', 'api_port']
     for req in required:
         if req not in data or not data[req]:
             print(f"Error: Missing required field '{req}'")
@@ -136,6 +122,12 @@ def main():
     tld = data['tld'].lower().strip()
     if not re.match(r'^[a-z0-9]+$', tld):
         print(f"Error: TLD '{tld}' must be alphanumeric.")
+        sys.exit(1)
+
+    try:
+        api_port = int(data['api_port'].strip())
+    except ValueError:
+        print(f"Error: API Port '{data['api_port']}' must be a valid integer.")
         sys.exit(1)
         
     nodes_str = data.get('nodes', '')
@@ -159,11 +151,9 @@ def main():
         sys.exit(1)
         
     # Check liveness: ONLY Seed Domain URL
-    is_live = False
     print(f"Checking liveness of seed domain URL: {data['seed']}...")
     if check_url(data['seed']):
         print("Seed domain is accessible!")
-        is_live = True
     else:
         print("Error: Could not reach seed domain URL. Please ensure it is publicly accessible.")
         sys.exit(1)
@@ -174,6 +164,7 @@ def main():
         "network_id": data['network_id'],
         "tld": tld,
         "local_bind_ip": data['local_bind_ip'],
+        "api_port": api_port,
         "seed_domain": data['seed'],
         "bootstrap_nodes": unique_nodes,
     }
