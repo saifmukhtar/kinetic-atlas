@@ -46,6 +46,7 @@ fn get_or_create_config() -> Result<AtlasConfig, AtlasError> {
                         .to_string(),
                 ),
                 override_ipfs_gateway: None,
+                updater_public_key: None,
             };
             std::fs::write(
                 &atlas_config_path,

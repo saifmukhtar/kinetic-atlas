@@ -7,7 +7,7 @@ edition = "2021"
 tokio = { version = "1", features = ["full"] }
 serde = { version = "1.0", features = ["derive", "rc"] }
 serde_json = "1.0"
-libp2p = { version = "0.53", features = ["tokio", "tcp", "dns", "noise", "yamux", "kad", "macros", "request-response", "cbor"] }
+libp2p = { version = "0.53", features = ["tokio", "tcp", "dns", "noise", "yamux", "kad", "macros", "request-response", "cbor", "identify"] }
 reqwest = { version = "0.12", features = ["json", "stream"] }
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
@@ -20,6 +20,8 @@ bytes = "1.12.1"
 serde_bytes = "0.11.19"
 hickory-resolver = "0.24"
 thiserror = "1.0"
+kinetic-verify = "0.1.1"
+hex = "0.4.3"
 
 [dev-dependencies]
 proptest = "1.11.0"

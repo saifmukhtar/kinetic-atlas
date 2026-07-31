@@ -26,6 +26,9 @@ pub struct AtlasConfig {
     /// Override IPFS gateway
     #[serde(default)]
     pub override_ipfs_gateway: Option<String>,
+    /// Ed25519 public key (hex) to verify github network updates
+    #[serde(default)]
+    pub updater_public_key: Option<String>,
 }
 
 fn default_registry_url() -> Option<String> {
@@ -59,12 +62,6 @@ pub struct NetworkConfig {
     pub ipfs_gateway: Option<String>,
 }
 
-/// Reveal Payload
-#[derive(serde::Deserialize, serde::Serialize, Debug, Clone, PartialEq)]
-pub struct RevealPayload {
-    /// Payload
-    pub payload: Vec<u8>,
-}
 
 /// DNS Zone
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]

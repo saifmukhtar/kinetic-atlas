@@ -1,4 +1,5 @@
 use crate::registry::TldRegistry;
+use libp2p::identity::ed25519::PublicKey;
 use crate::types::AtlasConfig;
 use std::sync::Arc;
 use tokio::sync::RwLock;
@@ -16,6 +17,11 @@ struct GitHubContent {
 pub fn start_auto_updater(config: Arc<AtlasConfig>, registry: Arc<RwLock<TldRegistry>>) {
     if config.registry_url.is_none() {
         info!("GitHub Auto-Updater is disabled (registry_url is null).");
+        return;
+    }
+
+    if config.updater_public_key.is_none() || config.updater_public_key.as_ref().unwrap().is_empty() {
+        info!("GitHub Auto-Updater is disabled (updater_public_key is missing or empty).");
         return;
     }
 
@@ -63,6 +69,11 @@ async fn fetch_and_update(
     url: &str,
     config: Arc<AtlasConfig>,
 ) -> Result<usize, crate::error::AtlasError> {
+    let pubkey_hex = config.updater_public_key.as_ref().unwrap();
+    let pubkey_bytes = hex::decode(pubkey_hex)
+        .map_err(|e| crate::error::AtlasError::UpdaterFailed(format!("Invalid public key hex: {}", e)))?;
+    let public_key = PublicKey::try_from_bytes(&pubkey_bytes)
+        .map_err(|e| crate::error::AtlasError::UpdaterFailed(format!("Invalid public key bytes: {}", e)))?;
     let resp = client
         .get(url)
         .send()
@@ -92,27 +103,58 @@ async fn fetch_and_update(
     for item in contents {
         if item.item_type == "file" && item.name.ends_with(".json") {
             if let Some(download_url) = item.download_url {
-                match client.get(&download_url).send().await {
-                    Ok(file_resp) => {
-                        let file_resp = file_resp
-                            .error_for_status()
-                            .map_err(|e| crate::error::AtlasError::UpdaterFailed(e.to_string()))?;
-                        if let Ok(file_bytes) = file_resp.bytes().await {
-                            let out_path = out_dir.join(&item.name);
-                            if let Err(e) = std::fs::write(&out_path, &file_bytes) {
-                                return Err(crate::error::AtlasError::UpdaterFailed(format!(
-                                    "Failed to write file {}: {}",
-                                    item.name, e
-                                )));
-                            } else {
-                                count += 1;
-                            }
-                        }
-                    }
+                // 1. Fetch JSON file
+                let file_resp = match client.get(&download_url).send().await {
+                    Ok(r) => r,
                     Err(e) => {
                         warn!("Auto-Updater: Failed to download {}: {}", download_url, e);
-                        return Err(crate::error::AtlasError::UpdaterFailed(e.to_string()));
+                        continue;
                     }
+                };
+                let file_resp = file_resp.error_for_status()
+                    .map_err(|e| crate::error::AtlasError::UpdaterFailed(e.to_string()))?;
+                let file_bytes = file_resp.bytes().await
+                    .map_err(|e| crate::error::AtlasError::UpdaterFailed(e.to_string()))?;
+
+                // 2. Fetch signature file
+                let sig_url = format!("{}.sig", download_url);
+                let sig_resp = match client.get(&sig_url).send().await {
+                    Ok(r) => r,
+                    Err(e) => {
+                        warn!("Auto-Updater: Failed to download signature {}: {}", sig_url, e);
+                        continue;
+                    }
+                };
+                let sig_resp = sig_resp.error_for_status()
+                    .map_err(|e| crate::error::AtlasError::UpdaterFailed(format!("Missing signature for {}: {}", item.name, e)))?;
+                let sig_hex_bytes = sig_resp.bytes().await
+                    .map_err(|e| crate::error::AtlasError::UpdaterFailed(e.to_string()))?;
+
+                // 3. Verify signature
+                let sig_hex_str = String::from_utf8_lossy(&sig_hex_bytes).trim().to_string();
+                let sig_bytes = match hex::decode(&sig_hex_str) {
+                    Ok(b) => b,
+                    Err(e) => {
+                        warn!("Auto-Updater: Invalid signature hex for {}: {}", item.name, e);
+                        continue;
+                    }
+                };
+
+                if !public_key.verify(&file_bytes, &sig_bytes) {
+                    warn!("Auto-Updater: CRITICAL - Signature verification failed for {}!", item.name);
+                    continue; // Skip writing this file, it might be forged
+                }
+
+                // 4. Write verified file to disk
+                let out_path = out_dir.join(&item.name);
+                if let Err(e) = std::fs::write(&out_path, &file_bytes) {
+                    return Err(crate::error::AtlasError::UpdaterFailed(format!(
+                        "Failed to write verified file {}: {}",
+                        item.name, e
+                    )));
+                } else {
+                    info!("Auto-Updater: Verified and updated {}", item.name);
+                    count += 1;
                 }
             }
         }
