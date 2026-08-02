@@ -154,10 +154,10 @@ body:
     id: binary_download
     attributes:
       label: Binary Download URL
-      description: Provide the link to your GitHub Releases or download page for users to get the latest daemon binary.
+      description: "Required if you selected 'Desktop GUI Client' above. Provide the link to your latest daemon binary."
       placeholder: https://github.com/saifmukhtar/kinetic/releases/latest
     validations:
-      required: true
+      required: false
 
   - type: input
     id: ipfs_gateway

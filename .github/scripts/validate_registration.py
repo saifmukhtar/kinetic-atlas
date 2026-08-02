@@ -73,6 +73,7 @@ def parse_issue_body(body):
             elif 'description' in header: current_key = 'desc'
             elif 'project website' in header: current_key = 'url'
             elif 'repository url' in header: current_key = 'repo'
+            elif 'platform integrations' in header: current_key = 'integrations'
             elif 'binary download' in header: current_key = 'binary'
             elif 'logo url' in header: current_key = 'logo_url'
             elif 'seed domain' in header: current_key = 'seed'
@@ -141,6 +142,11 @@ def main():
     for req in required:
         if req not in data or not data[req]:
             print(f"Error: Missing required field '{req}'")
+            sys.exit(1)
+            
+    if '[x] Desktop GUI Client' in data.get('integrations', ''):
+        if not data.get('binary'):
+            print("Error: 'Binary Download URL' is required because you selected 'Desktop GUI Client'.")
             sys.exit(1)
             
     tld = data['tld'].lower().strip()
