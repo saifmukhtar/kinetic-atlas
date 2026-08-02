@@ -44,3 +44,5 @@ jobs:
             Please review the generated JSON and ATLAS.md directory changes before merging!
           branch: "register-tld-${{ github.event.issue.number }}"
           labels: "automated-pr"
+          author: "Kinetic-Atlas-Bot <bot@kinetic.network>"
+          committer: "Kinetic-Atlas-Bot <bot@kinetic.network>"
