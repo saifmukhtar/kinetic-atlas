@@ -91,7 +91,7 @@ def parse_issue_body(body):
         
     return data
 
-def update_atlas_md(tld, name, network_type, desc, local_bind_ip, url, repo, status='🟢 Active'):
+def update_atlas_md(tld, network_id, network_type, desc, local_bind_ip, url, repo, status='🟢 Active'):
     with open('ATLAS.md', 'r') as f:
         content = f.read()
         
@@ -118,7 +118,7 @@ def update_atlas_md(tld, name, network_type, desc, local_bind_ip, url, repo, sta
             
     repo_link = f"[{repo}]({repo})" if repo else "N/A"
     url_link = f"[{url}]({url})" if url else "N/A"
-    new_row = f"| `{tld}` | {name} | {network_type} | {status} | {desc} | {local_bind_ip} | {url_link} | {repo_link} |"
+    new_row = f"| `{tld}` | {network_id} | {network_type} | {status} | {desc} | {local_bind_ip} | {url_link} | {repo_link} |"
     table_rows = [r for r in table_rows if r[0] != tld]
     table_rows.append((tld, new_row))
     table_rows.sort(key=lambda x: x[0])
@@ -137,7 +137,7 @@ def main():
     data = parse_issue_body(issue_body)
     
     # Validate required fields
-    required = ['version', 'name', 'tld', 'desc', 'url', 'seed', 'network_id', 'local_bind_ip', 'api_port']
+    required = ['version', 'tld', 'desc', 'url', 'seed', 'network_id', 'local_bind_ip', 'api_port']
     for req in required:
         if req not in data or not data[req]:
             print(f"Error: Missing required field '{req}'")
@@ -253,7 +253,7 @@ def main():
     # Update ATLAS.md
     update_atlas_md(
         tld, 
-        sanitize_markdown(data['name']), 
+        sanitize_markdown(data['network_id']), 
         sanitize_markdown(data.get('network_type', 'Public')), 
         sanitize_markdown(data['desc']), 
         sanitize_markdown(data['local_bind_ip']), 

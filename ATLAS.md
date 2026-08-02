@@ -6,5 +6,5 @@ If you are running a Kinetic fork and want your domains to be accessible globall
 
 ## Registered Networks
 
-| TLD Suffix | Network Name | Network Type | Status | Description | Local Bind IP | Website | Repository |
+| TLD Suffix | Network ID | Network Type | Status | Description | Local Bind IP | Website | Repository |
 | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
