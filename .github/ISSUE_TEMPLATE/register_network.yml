@@ -52,6 +52,7 @@ body:
       options:
         - Public
         - Community
+        - Private
         - Dev
     validations:
       required: true
