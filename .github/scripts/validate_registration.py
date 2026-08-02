@@ -4,15 +4,32 @@ import re
 import socket
 import json
 import urllib.request
+import urllib.parse
+import ipaddress
+
+def is_public_ip(ip_str):
+    try:
+        ip = ipaddress.ip_address(ip_str)
+        return ip.is_global and not (ip.is_private or ip.is_loopback or ip.is_link_local or ip.is_multicast or ip.is_reserved)
+    except ValueError:
+        return False
 
 def check_url(url):
     try:
-        req = urllib.request.Request(f"http://{url}", headers={'User-Agent': 'Mozilla/5.0'})
+        parsed = urllib.parse.urlparse(f"http://{url}" if "://" not in url else url)
+        host = parsed.hostname
+        if not host: return False
+        ip = socket.gethostbyname(host)
+        if not is_public_ip(ip):
+            print(f"Error: {host} resolves to private/reserved IP {ip}")
+            return False
+            
+        req = urllib.request.Request(f"http://{ip}{parsed.path or '/'}", headers={'User-Agent': 'Mozilla/5.0', 'Host': host})
         urllib.request.urlopen(req, timeout=5)
         return True
     except Exception as e:
         try:
-            req = urllib.request.Request(f"https://{url}", headers={'User-Agent': 'Mozilla/5.0'})
+            req = urllib.request.Request(f"https://{ip}{parsed.path or '/'}", headers={'User-Agent': 'Mozilla/5.0', 'Host': host})
             urllib.request.urlopen(req, timeout=5)
             return True
         except Exception as e2:
@@ -174,7 +191,18 @@ def main():
         logo_url = data['logo_url'].strip()
         print(f"Validating logo URL: {logo_url}")
         try:
-            req = urllib.request.Request(logo_url, method="HEAD", headers={'User-Agent': 'Mozilla/5.0'})
+            parsed = urllib.parse.urlparse(logo_url)
+            host = parsed.hostname
+            if not host:
+                raise ValueError("Invalid logo URL")
+            ip = socket.gethostbyname(host)
+            if not is_public_ip(ip):
+                print(f"Error: Logo URL {host} resolves to private/reserved IP {ip}")
+                sys.exit(1)
+                
+            safe_url = f"{parsed.scheme}://{ip}{parsed.path}?{parsed.query}" if parsed.query else f"{parsed.scheme}://{ip}{parsed.path}"
+                
+            req = urllib.request.Request(safe_url, method="HEAD", headers={'User-Agent': 'Mozilla/5.0', 'Host': host})
             with urllib.request.urlopen(req, timeout=5) as response:
                 content_length = response.headers.get('Content-Length')
                 content_type = response.headers.get('Content-Type')
@@ -192,7 +220,7 @@ def main():
             ext = ".png" if content_type == "image/png" else ".svg"
             logo_path = f"logos/{tld}{ext}"
             
-            get_req = urllib.request.Request(logo_url, headers={'User-Agent': 'Mozilla/5.0'})
+            get_req = urllib.request.Request(safe_url, headers={'User-Agent': 'Mozilla/5.0', 'Host': host})
             with urllib.request.urlopen(get_req, timeout=10) as get_response:
                 with open(logo_path, "wb") as f:
                     f.write(get_response.read())

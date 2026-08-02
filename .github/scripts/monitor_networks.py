@@ -3,11 +3,24 @@ import sys
 import json
 import socket
 import urllib.request
+import urllib.parse
+import ipaddress
+
+def is_public_ip(ip_str):
+    try:
+        ip = ipaddress.ip_address(ip_str)
+        return ip.is_global and not (ip.is_private or ip.is_loopback or ip.is_link_local or ip.is_multicast or ip.is_reserved)
+    except ValueError:
+        return False
 
 def ping_host(host, port, timeout=5):
     """Attempt a TCP connection to the specified host and port."""
     try:
         ip = socket.gethostbyname(host)
+        if not is_public_ip(ip):
+            print(f"Ping rejected for {host}:{port} - resolves to private/reserved IP {ip}")
+            return False
+            
         s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         s.settimeout(timeout)
         s.connect((ip, int(port)))
@@ -19,12 +32,20 @@ def ping_host(host, port, timeout=5):
 
 def check_url(url):
     try:
-        req = urllib.request.Request(f"http://{url}", headers={'User-Agent': 'Mozilla/5.0'})
+        parsed = urllib.parse.urlparse(f"http://{url}" if "://" not in url else url)
+        host = parsed.hostname
+        if not host: return False
+        ip = socket.gethostbyname(host)
+        if not is_public_ip(ip):
+            print(f"Error: {host} resolves to private/reserved IP {ip}")
+            return False
+            
+        req = urllib.request.Request(f"http://{ip}{parsed.path or '/'}", headers={'User-Agent': 'Mozilla/5.0', 'Host': host})
         urllib.request.urlopen(req, timeout=5)
         return True
     except Exception:
         try:
-            req = urllib.request.Request(f"https://{url}", headers={'User-Agent': 'Mozilla/5.0'})
+            req = urllib.request.Request(f"https://{ip}{parsed.path or '/'}", headers={'User-Agent': 'Mozilla/5.0', 'Host': host})
             urllib.request.urlopen(req, timeout=5)
             return True
         except Exception as e2:
