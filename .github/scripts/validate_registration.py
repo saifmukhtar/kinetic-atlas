@@ -14,6 +14,13 @@ def is_public_ip(ip_str):
     except ValueError:
         return False
 
+def sanitize_markdown(text):
+    if not isinstance(text, str):
+        return text
+    # Replace pipes and newlines to prevent table breakout
+    text = text.replace('|', '-').replace('\n', ' ').replace('\r', '')
+    return text.strip()
+
 def check_url(url):
     try:
         parsed = urllib.parse.urlparse(f"http://{url}" if "://" not in url else url)
@@ -244,7 +251,15 @@ def main():
         json.dump(config, f, indent=4)
         
     # Update ATLAS.md
-    update_atlas_md(tld, data['name'], data.get('network_type', 'Public'), data['desc'], data['local_bind_ip'], data['url'], data.get('repo', ''))
+    update_atlas_md(
+        tld, 
+        sanitize_markdown(data['name']), 
+        sanitize_markdown(data.get('network_type', 'Public')), 
+        sanitize_markdown(data['desc']), 
+        sanitize_markdown(data['local_bind_ip']), 
+        sanitize_markdown(data['url']), 
+        sanitize_markdown(data.get('repo', ''))
+    )
     
     # Aggregate all networks into root index.json
     all_networks = []
