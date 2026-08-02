@@ -8,7 +8,7 @@ body:
     attributes:
       value: |
         ## Welcome to the Atlas Registry! 🌐
-        Fill out this form to add your Kinetic network to the global Atlas bridge. 
+        Fill out this form to add your network to the global Atlas Network. 
         **Note:** An automated bot will ping your seed domain and bootstrap nodes to ensure your network is live before creating a Pull Request.
 
   - type: markdown
