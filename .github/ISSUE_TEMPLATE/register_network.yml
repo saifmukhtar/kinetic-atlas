@@ -11,6 +11,11 @@ body:
         Please fill out this form to add your Kinetic fork or network to the global Atlas bridge. 
         **Note:** An automated bot will ping your seed domain and bootstrap nodes to ensure your network is live before creating a Pull Request.
 
+  - type: markdown
+    attributes:
+      value: |
+        ### 1. Core Network Identity
+        These are the fundamental, unchangeable identifiers for the network.
 
   - type: input
     id: version
@@ -22,11 +27,11 @@ body:
       required: true
 
   - type: input
-    id: network_name
+    id: network_id
     attributes:
-      label: Network Name
-      description: The human-readable name of your network (e.g., "Kinetic").
-      placeholder: Kinetic
+      label: Network ID
+      description: The unique network ID for your chain (e.g., "kinetic").
+      placeholder: kinetic
     validations:
       required: true
 
@@ -38,6 +43,24 @@ body:
       placeholder: kin
     validations:
       required: true
+
+  - type: dropdown
+    id: network_type
+    attributes:
+      label: Network Type
+      description: What kind of network is this?
+      options:
+        - Public
+        - Community
+        - Dev
+    validations:
+      required: true
+
+  - type: markdown
+    attributes:
+      value: |
+        ### 2. Project Information & Media
+        These are the human-facing details that will show up on the Atlas directory.
 
   - type: input
     id: description
@@ -65,15 +88,6 @@ body:
       placeholder: https://github.com/saifmukhtar/kinetic
 
   - type: input
-    id: binary_download
-    attributes:
-      label: Binary Download URL
-      description: Provide the link to your GitHub Releases or download page for users to get the latest daemon binary.
-      placeholder: https://github.com/saifmukhtar/kinetic/releases/latest
-    validations:
-      required: true
-
-  - type: input
     id: logo_url
     attributes:
       label: Logo URL
@@ -81,6 +95,12 @@ body:
       placeholder: https://example.com/logo.png
     validations:
       required: true
+
+  - type: markdown
+    attributes:
+      value: |
+        ### 3. Node Configuration & Technical Connectivity
+        These are the technical details required for nodes and clients to actually connect to the network.
 
   - type: input
     id: seed_domain
@@ -91,24 +111,13 @@ body:
     validations:
       required: true
 
-  - type: dropdown
-    id: network_type
+  - type: textarea
+    id: bootstrap_nodes
     attributes:
-      label: Network Type
-      description: What kind of network is this?
-      options:
-        - Public
-        - Community
-        - Dev
-    validations:
-      required: true
-
-  - type: input
-    id: network_id
-    attributes:
-      label: Network ID
-      description: The unique network ID for your chain (e.g., "kinetic").
-      placeholder: kinetic
+      label: Hardcoded Bootstrap Nodes
+      description: Provide exactly 3 reliable, unique bootstrap nodes (libp2p multiaddr format with PeerID, one per line).
+      placeholder: |
+        /ip4/44.219.188.204/tcp/6070/p2p/12D3KooWJkn8Dgb33N2p9sLBNX9Eg8W8whgdjLs2YJxWuTme7ZSs
     validations:
       required: true
 
@@ -130,13 +139,12 @@ body:
     validations:
       required: true
 
-  - type: textarea
-    id: bootstrap_nodes
+  - type: input
+    id: binary_download
     attributes:
-      label: Hardcoded Bootstrap Nodes
-      description: Provide exactly 3 reliable, unique bootstrap nodes (libp2p multiaddr format with PeerID, one per line).
-      placeholder: |
-        /ip4/44.219.188.204/tcp/6070/p2p/12D3KooWJkn8Dgb33N2p9sLBNX9Eg8W8whgdjLs2YJxWuTme7ZSs
+      label: Binary Download URL
+      description: Provide the link to your GitHub Releases or download page for users to get the latest daemon binary.
+      placeholder: https://github.com/saifmukhtar/kinetic/releases/latest
     validations:
       required: true
 
