@@ -96,6 +96,17 @@ body:
     validations:
       required: true
 
+  - type: checkboxes
+    id: integrations
+    attributes:
+      label: Platform Integrations
+      description: Select which Kinetic platforms and clients your network currently supports or wishes to integrate with.
+      options:
+        - label: "Atlas Global Registry (Enable public discoverability for this network)"
+        - label: "Browser Extension Support (Allow users to interact via the web extension)"
+        - label: "Desktop GUI Client (Provide a downloadable graphical interface for Windows/Mac/Linux)"
+        - label: "Mobile App Integration (Support connections from Android & iOS clients)"
+
   - type: markdown
     attributes:
       value: |
