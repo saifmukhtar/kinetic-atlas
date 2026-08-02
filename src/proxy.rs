@@ -14,7 +14,8 @@ use crate::error::AtlasError;
 use crate::network::NetworkCommand;
 use crate::registry::TldRegistry;
 use crate::swarm_manager::SwarmManager;
-use crate::types::{DnsRecord, DnsZone, ProxyRequest, RevealPayload};
+use crate::types::{DnsRecord, DnsZone, ProxyRequest};
+use kinetic_verify::Reveal;
 
 /// Proxy state
 #[derive(Clone)]
@@ -162,8 +163,8 @@ async fn handle_proxy_request(
         }
     };
 
-    // Parse RevealPayload and DnsZone
-    let reveal: RevealPayload = match serde_json::from_slice(&dht_bytes) {
+    // Parse Reveal and verify signature
+    let reveal: Reveal = match serde_json::from_slice(&dht_bytes) {
         Ok(r) => r,
         Err(_) => {
             return Err(AtlasError::DnsResolutionFailed(
@@ -171,6 +172,12 @@ async fn handle_proxy_request(
             ));
         }
     };
+
+    if let Err(e) = reveal.verify_signature(&config.network_id) {
+        return Err(AtlasError::DnsResolutionFailed(
+            format!("Invalid DHT payload signature: {}", e),
+        ));
+    }
 
     let zone: DnsZone = match serde_json::from_slice(&reveal.payload) {
         Ok(z) => z,
@@ -218,8 +225,8 @@ async fn handle_proxy_request(
     }
 
     // Buffer the request body once so we can retry multiple gateways/peers if needed.
-    // 1GB limit to avoid the previous 5MB limit breaking uploads.
-    let body_bytes = match axum::body::to_bytes(req.into_body(), 1024 * 1024 * 1024).await {
+    // 10MB limit to avoid OOM DoS attacks.
+    let body_bytes = match axum::body::to_bytes(req.into_body(), 10 * 1024 * 1024).await {
         Ok(b) => b.to_vec(),
         Err(e) => {
             warn!("Failed to read request body: {}", e);

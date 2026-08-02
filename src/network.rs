@@ -1,6 +1,6 @@
 #![allow(missing_docs)]
 use libp2p::{
-    identity, kad, noise, request_response, tcp, yamux, PeerId, StreamProtocol, Swarm, SwarmBuilder,
+    identify, identity, kad, noise, request_response, tcp, yamux, PeerId, StreamProtocol, Swarm, SwarmBuilder,
 };
 use std::time::Duration;
 use tokio::sync::{mpsc, oneshot};
@@ -44,6 +44,8 @@ pub struct AtlasBehaviour {
     pub kad: kad::Behaviour<kad::store::MemoryStore>,
     /// Request-Response Protocol
     pub request_response: request_response::cbor::Behaviour<ProxyRequest, ProxyResponse>,
+    /// Identify Protocol
+    pub identify: identify::Behaviour,
 }
 
 /// The kinetic atlas node
@@ -87,7 +89,7 @@ impl KineticAtlasNode {
                 // Kademlia Configuration
                 let mut kad_cfg = kad::Config::default();
                 kad_cfg.set_protocol_names(vec![kad_protocol_name]);
-                kad_cfg.set_max_packet_size(2 * 1024 * 1024); // 2 MB
+                kad_cfg.set_max_packet_size(102400); // 100 KB
                 kad_cfg.set_query_timeout(Duration::from_secs(5));
 
                 let store = kad::store::MemoryStore::new(key.public().to_peer_id());
@@ -103,9 +105,14 @@ impl KineticAtlasNode {
 
                 let request_response = request_response::cbor::Behaviour::new(protocols, rr_config);
 
+                // Identify Configuration
+                let identify_config = identify::Config::new("/atlas/1.0.0".into(), key.public());
+                let identify = identify::Behaviour::new(identify_config);
+
                 AtlasBehaviour {
                     kad: kademlia,
                     request_response,
+                    identify,
                 }
             })
             .map_err(|e| AtlasError::NetworkInitFailed(format!("Behaviour config failed: {}", e)))?
@@ -234,6 +241,9 @@ impl KineticAtlasNode {
                             if let Some(resp_tx) = pending_dials.remove(&peer_id) {
                                 let _ = resp_tx.send(None);
                             }
+                        }
+                        libp2p::swarm::SwarmEvent::Behaviour(AtlasBehaviourEvent::Identify(event)) => {
+                            info!("Identify event: {:?}", event);
                         }
                         _ => {}
                     }
