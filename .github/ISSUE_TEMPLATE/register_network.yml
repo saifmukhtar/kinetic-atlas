@@ -7,21 +7,21 @@ body:
   - type: markdown
     attributes:
       value: |
-        ## Welcome to the Atlas Registry!
-        Please fill out this form to add your Kinetic fork or network to the global Atlas bridge. 
+        ## Welcome to the Atlas Registry! 🌐
+        Fill out this form to add your Kinetic network to the global Atlas bridge. 
         **Note:** An automated bot will ping your seed domain and bootstrap nodes to ensure your network is live before creating a Pull Request.
 
   - type: markdown
     attributes:
       value: |
-        ### 1. Core Network Identity
-        These are the fundamental, unchangeable identifiers for the network.
+        ### 🧬 1. Core Network Identity
+        *Fundamental, unchangeable identifiers for your network.*
 
   - type: input
     id: version
     attributes:
-      label: Protocol Version
-      description: The version of the Atlas configuration schema this network uses (e.g., "1.0").
+      label: 🔖 Protocol Version
+      description: The version of the Atlas configuration schema this network uses.
       placeholder: "1.0"
     validations:
       required: true
@@ -29,8 +29,8 @@ body:
   - type: input
     id: network_id
     attributes:
-      label: Network ID
-      description: The unique network ID for your chain (e.g., "kinetic").
+      label: 🆔 Network ID
+      description: The unique identifier for your chain (e.g., `kinetic`).
       placeholder: kinetic
     validations:
       required: true
@@ -38,8 +38,8 @@ body:
   - type: input
     id: tld_suffix
     attributes:
-      label: TLD Suffix
-      description: The top-level domain suffix for your network without the dot (e.g., "kin"). Must be alphanumeric.
+      label: 🏷️ TLD Suffix
+      description: Your network's top-level domain suffix without the dot (must be alphanumeric).
       placeholder: kin
     validations:
       required: true
@@ -47,8 +47,8 @@ body:
   - type: dropdown
     id: network_type
     attributes:
-      label: Network Type
-      description: What kind of network is this?
+      label: 🌍 Network Type
+      description: Select the environment classification for this network.
       options:
         - Public
         - Community
@@ -59,14 +59,14 @@ body:
   - type: markdown
     attributes:
       value: |
-        ### 2. Project Information & Media
-        These are the human-facing details that will show up on the Atlas directory.
+        ### 🎨 2. Project Information & Media
+        *Public-facing details that will appear on the Atlas directory.*
 
   - type: input
     id: description
     attributes:
-      label: Short Description
-      description: A brief summary of your network's purpose (max 100 chars). This will appear in the ATLAS.md discovery directory.
+      label: 📝 Short Description
+      description: A brief summary of your network's purpose (max 100 characters).
       placeholder: A fast, privacy-focused fork of Kinetic.
     validations:
       required: true
@@ -74,8 +74,8 @@ body:
   - type: input
     id: website
     attributes:
-      label: Project Website
-      description: Where can users learn more about your network?
+      label: 🌐 Project Website
+      description: Where users can learn more about your network.
       placeholder: https://saifmkhtar.dev
     validations:
       required: true
@@ -83,15 +83,15 @@ body:
   - type: input
     id: repository
     attributes:
-      label: Repository URL
+      label: 💻 Repository URL (Optional)
       description: The GitHub or GitLab URL of your project's source code.
       placeholder: https://github.com/saifmukhtar/kinetic
 
   - type: input
     id: logo_url
     attributes:
-      label: Logo URL
-      description: "Provide a direct URL to your network's logo. MUST be PNG or SVG. Max size: 50KB. Recommended dimensions: 128x128. Large images will be automatically rejected."
+      label: 🖼️ Logo URL
+      description: "Direct URL to your network's logo. **Must be PNG or SVG (Max 50KB).**"
       placeholder: https://example.com/logo.png
     validations:
       required: true
@@ -99,25 +99,25 @@ body:
   - type: checkboxes
     id: integrations
     attributes:
-      label: Platform Integrations
-      description: Select which Kinetic platforms and clients your network currently supports or wishes to integrate with.
+      label: 🔌 Platform Integrations
+      description: Select which platforms your network currently supports or wishes to integrate with.
       options:
-        - label: "Atlas Global Registry (Enable public discoverability for this network)"
-        - label: "Browser Extension Support (Allow users to interact via the web extension)"
-        - label: "Desktop GUI Client (Provide a downloadable graphical interface for Windows/Mac/Linux)"
-        - label: "Mobile App Integration (Support connections from Android & iOS clients)"
+        - label: "Atlas Global Registry (Enable public discoverability)"
+        - label: "Browser Extension Support (Allow interactions via web extension)"
+        - label: "Desktop GUI Client (Provide a downloadable graphical interface)"
+        - label: "Mobile App Integration (Support Android & iOS connections)"
 
   - type: markdown
     attributes:
       value: |
-        ### 3. Node Configuration & Technical Connectivity
-        These are the technical details required for nodes and clients to actually connect to the network.
+        ### ⚙️ 3. Node Configuration & Technical Connectivity
+        *Technical details required for nodes and clients to connect.*
 
   - type: input
     id: seed_domain
     attributes:
-      label: Seed Domain (seed.BASE_DOMAIN)
-      description: The primary DNS seed for your network (e.g., "seed.saifmkhtar.dev").
+      label: 📡 Seed Domain
+      description: The primary DNS seed for your network (e.g., `seed.BASE_DOMAIN`).
       placeholder: seed.saifmkhtar.dev
     validations:
       required: true
@@ -125,8 +125,8 @@ body:
   - type: textarea
     id: bootstrap_nodes
     attributes:
-      label: Hardcoded Bootstrap Nodes
-      description: Provide exactly 3 reliable, unique bootstrap nodes (libp2p multiaddr format with PeerID, one per line).
+      label: 🚀 Hardcoded Bootstrap Nodes
+      description: Provide **exactly 3** reliable, unique bootstrap nodes (one libp2p multiaddr per line).
       placeholder: |
         /ip4/44.219.188.204/tcp/6070/p2p/12D3KooWJkn8Dgb33N2p9sLBNX9Eg8W8whgdjLs2YJxWuTme7ZSs
     validations:
@@ -135,8 +135,8 @@ body:
   - type: input
     id: local_bind_ip
     attributes:
-      label: Local Bind IP
-      description: The local loopback IP (127.0.0.X) that local daemons for this network should bind to, preventing port conflicts.
+      label: 🖥️ Local Bind IP
+      description: The local loopback IP (`127.0.0.X`) that local daemons should bind to.
       placeholder: 127.0.0.X
     validations:
       required: true
@@ -144,8 +144,8 @@ body:
   - type: input
     id: api_port
     attributes:
-      label: API Port
-      description: The daemon's HTTP REST API port (e.g., 16002).
+      label: 🔌 API Port
+      description: The daemon's HTTP REST API port.
       placeholder: "16002"
     validations:
       required: true
@@ -153,8 +153,8 @@ body:
   - type: input
     id: binary_download
     attributes:
-      label: Binary Download URL
-      description: "Required if you selected 'Desktop GUI Client' above. Provide the link to your latest daemon binary."
+      label: 📦 Binary Download URL
+      description: "**Required if you selected 'Desktop GUI Client'.** Link to your latest daemon binary."
       placeholder: https://github.com/saifmukhtar/kinetic/releases/latest
     validations:
       required: false
@@ -162,8 +162,19 @@ body:
   - type: input
     id: ipfs_gateway
     attributes:
-      label: IPFS Gateway (Optional)
+      label: 🪐 IPFS Gateway (Optional)
       description: The default IPFS gateway your network recommends.
       placeholder: https://ipfs.io
     validations:
       required: false
+
+  - type: checkboxes
+    id: preflight
+    attributes:
+      label: ✅ Pre-flight Checklist
+      description: Please confirm the following before submitting.
+      options:
+        - label: "I confirm that my Seed Domain and Bootstrap Nodes are currently online."
+        - label: "I confirm my logo is under 50KB and follows the PNG/SVG requirement."
+    validations:
+      required: true
