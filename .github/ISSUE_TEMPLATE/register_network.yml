@@ -100,7 +100,7 @@ body:
     id: integrations
     attributes:
       label: 🔌 Platform Integrations
-      description: Select which platforms your network currently supports or wishes to integrate with.
+      description: Select which platforms your network currently wishes to integrate with.
       options:
         - label: "Atlas Global Registry (Enable public discoverability)"
         - label: "Browser Extension Support (Allow interactions via web extension)"
